@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.bouncestorage.chaoshttpproxy;
+package org.gaul.httpbin;
 
 import static java.util.Objects.requireNonNull;
 
@@ -28,7 +28,7 @@ import org.eclipse.jetty.server.ServerConnector;
  * Reimplementation of HttpBin http://httpbin.org/ suitable for offline unit
  * tests.
  */
-final class HttpBin {
+public final class HttpBin {
     private final Server server;
     private final HttpBinHandler handler;
 

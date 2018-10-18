@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.bouncestorage.chaoshttpproxy;
+package org.gaul.httpbin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
