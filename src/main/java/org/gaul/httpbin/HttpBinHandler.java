@@ -34,7 +34,7 @@ import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class HttpBinHandler extends AbstractHandler {
+public class HttpBinHandler extends AbstractHandler {
     private static final Logger logger = LoggerFactory.getLogger(
             HttpBinHandler.class);
 

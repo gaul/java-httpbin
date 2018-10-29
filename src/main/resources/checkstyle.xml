@@ -22,7 +22,6 @@
     <module name="ClassTypeParameterName"/>
     <module name="CovariantEquals"/>
     <module name="DeclarationOrder"/>
-    <module name="DesignForExtension"/>
     <module name="EmptyBlock">
       <property name="option" value="text"/>
     </module>
