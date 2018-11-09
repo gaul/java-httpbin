@@ -64,6 +64,30 @@ public class HttpBinHandler extends AbstractHandler {
                 servletResponse.setStatus(status);
                 baseRequest.setHandled(true);
                 return;
+            } else if (method.equals("GET") && uri.equals("/headers")) {
+                JSONObject headers = new JSONObject();
+                for (String headerName : Collections.list(
+                        request.getHeaderNames())) {
+                    headers.put(headerName, request.getHeader(headerName));
+                }
+
+                JSONObject response = new JSONObject();
+                response.put("headers", headers);
+                respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/ip")) {
+                JSONObject response = new JSONObject();
+                response.put("origin", request.getRemoteAddr());
+                respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/user-agent")) {
+                JSONObject response = new JSONObject();
+                response.put("user-agent", request.getHeader("User-Agent"));
+                respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
             } else if (method.equals("GET") && uri.equals("/get")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 // TODO: return JSON blob of request

@@ -11,6 +11,9 @@ httpbin.org.
 
 Java httpbin supports a subset of httpbin endpoints:
 
+- `/ip` Returns Origin IP.
+- `/user-agent` Returns user-agent.
+- `/headers` Returns headers.
 - `/get` Returns GET data.
 - `/post` Returns POST data.
 - `/patch` Returns PATCH data.
