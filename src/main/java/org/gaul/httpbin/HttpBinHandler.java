@@ -16,6 +16,7 @@
 
 package org.gaul.httpbin;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -23,12 +24,16 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.Enumeration;
 
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,6 +83,22 @@ public class HttpBinHandler extends AbstractHandler {
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
                 baseRequest.setHandled(true);
                 return;
+            } else if (uri.equals("/redirect-to")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                redirectTo(servletResponse, request.getParameter("url"));
+                baseRequest.setHandled(true);
+            } else if (uri.startsWith("/redirect/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                int count = Integer.parseInt(uri.substring(
+                        "/redirect/".length())) - 1;
+                if (count > 0) {
+                    redirectTo(servletResponse, "/redirect/" + count);
+                } else {
+                    servletResponse.setStatus(HttpServletResponse.SC_OK);
+                }
+
+                baseRequest.setHandled(true);
             } else if (method.equals("GET") &&
                     uri.equals("/response-headers")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -89,9 +110,92 @@ public class HttpBinHandler extends AbstractHandler {
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
                 baseRequest.setHandled(true);
                 return;
+            } else if (uri.equals("/cookies")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                JSONObject cookies = new JSONObject();
+
+                if (request.getCookies() != null) {
+                    for (Cookie cookie : request.getCookies()) {
+                        cookies.put(cookie.getName(), cookie.getValue());
+                    }
+                }
+
+                JSONObject response = new JSONObject();
+                response.put("cookies", cookies);
+
+                respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+            } else if (uri.startsWith("/cookies/set/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                String[] parts = uri.substring("/cookies/set/".length()).split(
+                        "/");
+
+                servletResponse.addHeader("Set-Cookie",
+                        String.format("%s=%s; Path=/", parts[0], parts[1]));
+
+                servletResponse.setHeader("Location", "/cookies");
+                servletResponse.setStatus(
+                        HttpServletResponse.SC_MOVED_TEMPORARILY);
+                baseRequest.setHandled(true);
+            } else if (uri.startsWith("/basic-auth")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                // FIXME: we don't actually check the username/password here
+                servletResponse.addHeader("WWW-Authenticate",
+                        "Basic realm=\"Fake Realm\"");
+                servletResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                baseRequest.setHandled(true);
+            } else if (uri.equals("/anything")) {
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                baseRequest.setHandled(true);
+
+                final JSONObject response = new JSONObject();
+
+                // Method
+                response.put("method", method);
+
+                // Headers
+                final JSONObject headers = new JSONObject();
+                response.put("headers", headers);
+
+                for (Enumeration<String> names = request.getHeaderNames();
+                        names.hasMoreElements();) {
+                    final String name = names.nextElement();
+                    headers.put(name, request.getHeader(name));
+                }
+
+                // Body data
+                final ByteArrayOutputStream data = new ByteArrayOutputStream();
+                Utils.copy(is, data);
+
+                response.put("data", data.toString("UTF-8"));
+                respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
             }
             servletResponse.setStatus(501);
             baseRequest.setHandled(true);
+        } catch (JSONException e) {
+            servletResponse.setStatus(500);
+            baseRequest.setHandled(true);
         }
+    }
+
+    private static void respondJSON(HttpServletResponse response,
+            OutputStream os, JSONObject obj) throws IOException {
+        final byte[] body = obj.toString().getBytes();
+
+        response.setContentLength(body.length);
+        response.setContentType("application/json");
+        response.setStatus(HttpServletResponse.SC_OK);
+        os.write(body);
+        os.flush();
+    }
+
+    private static void redirectTo(HttpServletResponse response,
+            String location) {
+        response.setHeader("Location", location);
+        response.setStatus(HttpServletResponse.SC_MOVED_TEMPORARILY);
     }
 }
