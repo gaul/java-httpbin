@@ -34,17 +34,10 @@ Java httpbin supports a subset of httpbin endpoints:
 First add dependency to `pom.xml`:
 
 ```xml
-<distributionManagement>
-  <snapshotRepository>
-    <id>ossrh</id>
-    <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-  </snapshotRepository>
-</distributionManagement>
-
 <dependency>
   <groupId>org.gaul</groupId>
   <artifactId>httpbin</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
