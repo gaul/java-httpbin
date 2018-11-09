@@ -27,8 +27,6 @@ import java.util.Collections;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import com.google.common.io.ByteStreams;
-
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.slf4j.Logger;
@@ -54,14 +52,14 @@ public class HttpBinHandler extends AbstractHandler {
              OutputStream os = servletResponse.getOutputStream()) {
             Writer writer = new OutputStreamWriter(os, StandardCharsets.UTF_8);
             if (method.equals("GET") && uri.startsWith("/status/")) {
-                ByteStreams.copy(is, ByteStreams.nullOutputStream());
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 int status = Integer.parseInt(uri.substring(
                         "/status/".length()));
                 servletResponse.setStatus(status);
                 baseRequest.setHandled(true);
                 return;
             } else if (method.equals("GET") && uri.equals("/get")) {
-                ByteStreams.copy(is, ByteStreams.nullOutputStream());
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 // TODO: return JSON blob of request
                 String content = "Hello, world!";
                 servletResponse.setContentLength(content.length());
@@ -71,18 +69,18 @@ public class HttpBinHandler extends AbstractHandler {
                 writer.flush();
                 return;
             } else if (method.equals("POST") && uri.equals("/post")) {
-                ByteStreams.copy(is, os);
+                Utils.copy(is, os);
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
                 baseRequest.setHandled(true);
                 return;
             } else if (method.equals("PUT") && uri.equals("/put")) {
-                ByteStreams.copy(is, os);
+                Utils.copy(is, os);
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
                 baseRequest.setHandled(true);
                 return;
             } else if (method.equals("GET") &&
                     uri.equals("/response-headers")) {
-                ByteStreams.copy(is, ByteStreams.nullOutputStream());
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 for (String paramName : Collections.list(
                         request.getParameterNames())) {
                     servletResponse.addHeader(paramName, request.getParameter(
