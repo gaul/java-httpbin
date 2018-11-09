@@ -11,13 +11,20 @@ httpbin.org.
 
 Java httpbin supports a subset of httpbin endpoints:
 
-| Endpoint                               | Description                                                          |
-| -------------------------------------- | -------------------------------------------------------------------- |
-| `/get`                                 | Returns GET data.                                                    |
-| `/post`                                | Returns POST data.                                                   |
-| `/patch`                               | Returns PATCH data.                                                  |
-| `/put`                                 | Returns PUT data.                                                    |
-| `/status/:code`                        | Returns given HTTP Status code or random if more than one are given. |
+- `/get` Returns GET data.
+- `/post` Returns POST data.
+- `/patch` Returns PATCH data.
+- `/put`  Returns PUT data.
+- `/status/:code` Returns given HTTP Status code.
+- `/redirect/:n` 302 Redirects _n_ times.
+- `/redirect-to?url=foo` 302 Redirects to the _foo_ URL.
+- `/cookies` Returns the cookies.
+- `/cookies/set?name=value` Sets one or more simple cookies.
+- `/basic-auth/:user/:passwd` Challenges HTTP Basic Auth.
+- `/html` Returns some HTML.
+- `/xml` Returns some XML.
+- `/image/png` Returns page containing a PNG image.
+- `/image/jpeg` Returns page containing a JPEG image.
 
 ## Usage
 

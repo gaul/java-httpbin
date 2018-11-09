@@ -155,7 +155,6 @@ public class HttpBinHandler extends AbstractHandler {
                 return;
             } else if (uri.equals("/anything")) {
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
-                baseRequest.setHandled(true);
 
                 final JSONObject response = new JSONObject();
 
@@ -178,6 +177,32 @@ public class HttpBinHandler extends AbstractHandler {
 
                 response.put("data", data.toString("UTF-8"));
                 respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/image/jpeg")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.addHeader("Content-Type", "image/jpeg");
+                copyResource(servletResponse, "/image.jpg");
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/image/png")) {
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.addHeader("Content-Type", "image/png");
+                copyResource(servletResponse, "/image.png");
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/html")) {
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.addHeader("Content-Type",
+                        "text/html; charset=utf-8");
+                copyResource(servletResponse, "/text.html");
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/xml")) {
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.addHeader("Content-Type", "application/xml");
+                copyResource(servletResponse, "/text.xml");
                 baseRequest.setHandled(true);
                 return;
             }
@@ -204,5 +229,16 @@ public class HttpBinHandler extends AbstractHandler {
             String location) {
         response.setHeader("Location", location);
         response.setStatus(HttpServletResponse.SC_MOVED_TEMPORARILY);
+    }
+
+    private void copyResource(HttpServletResponse response, String resource)
+            throws IOException {
+        try (InputStream is = getClass().getResourceAsStream(resource)) {
+            long length = Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+            response.setContentLength((int) length);
+        }
+        try (InputStream is = getClass().getResourceAsStream(resource)) {
+            Utils.copy(is, response.getOutputStream());
+        }
     }
 }
