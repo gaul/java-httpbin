@@ -57,7 +57,7 @@ public class HttpBinHandler extends AbstractHandler {
         try (InputStream is = request.getInputStream();
              OutputStream os = servletResponse.getOutputStream()) {
             Writer writer = new OutputStreamWriter(os, StandardCharsets.UTF_8);
-            if (method.equals("GET") && uri.startsWith("/status/")) {
+            if (uri.startsWith("/status/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 int status = Integer.parseInt(uri.substring(
                         "/status/".length()));
