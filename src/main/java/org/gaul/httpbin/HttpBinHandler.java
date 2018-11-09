@@ -88,6 +88,7 @@ public class HttpBinHandler extends AbstractHandler {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 redirectTo(servletResponse, request.getParameter("url"));
                 baseRequest.setHandled(true);
+                return;
             } else if (uri.startsWith("/redirect/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
@@ -100,6 +101,7 @@ public class HttpBinHandler extends AbstractHandler {
                 }
 
                 baseRequest.setHandled(true);
+                return;
             } else if (method.equals("GET") &&
                     uri.equals("/response-headers")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -127,6 +129,7 @@ public class HttpBinHandler extends AbstractHandler {
 
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
+                return;
             } else if (uri.startsWith("/cookies/set/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
@@ -140,6 +143,7 @@ public class HttpBinHandler extends AbstractHandler {
                 servletResponse.setStatus(
                         HttpServletResponse.SC_MOVED_TEMPORARILY);
                 baseRequest.setHandled(true);
+                return;
             } else if (uri.startsWith("/basic-auth")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
@@ -148,6 +152,7 @@ public class HttpBinHandler extends AbstractHandler {
                         "Basic realm=\"Fake Realm\"");
                 servletResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 baseRequest.setHandled(true);
+                return;
             } else if (uri.equals("/anything")) {
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
                 baseRequest.setHandled(true);
@@ -174,6 +179,7 @@ public class HttpBinHandler extends AbstractHandler {
                 response.put("data", data.toString("UTF-8"));
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
+                return;
             }
             servletResponse.setStatus(501);
             baseRequest.setHandled(true);
