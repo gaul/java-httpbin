@@ -24,6 +24,8 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Enumeration;
 
@@ -168,13 +170,34 @@ public class HttpBinHandler extends AbstractHandler {
                         HttpServletResponse.SC_MOVED_TEMPORARILY);
                 baseRequest.setHandled(true);
                 return;
-            } else if (uri.startsWith("/basic-auth")) {
+            } else if (uri.startsWith("/basic-auth/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
-                // FIXME: we don't actually check the username/password here
-                servletResponse.addHeader("WWW-Authenticate",
-                        "Basic realm=\"Fake Realm\"");
-                servletResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                String header = request.getHeader("Authorization");
+                if (header == null || !header.startsWith("Basic ")) {
+                    servletResponse.setStatus(
+                            HttpServletResponse.SC_UNAUTHORIZED);
+                    baseRequest.setHandled(true);
+                    return;
+                }
+
+                byte[] bytes = Base64.getDecoder().decode(
+                        header.substring("Basic ".length()));
+                String[] parts = new String(
+                        bytes, StandardCharsets.UTF_8).split(":", 2);
+                String[] auth = uri.substring("/basic-auth/".length()).split(
+                        "/", 2);
+                if (auth.length != 2 || !Arrays.equals(auth, parts)) {
+                    servletResponse.setStatus(
+                            HttpServletResponse.SC_UNAUTHORIZED);
+                    baseRequest.setHandled(true);
+                    return;
+                }
+
+                JSONObject response = new JSONObject();
+                response.put("authenticated", true);
+                response.put("user", parts[0]);
+                respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
             } else if (uri.equals("/anything")) {
