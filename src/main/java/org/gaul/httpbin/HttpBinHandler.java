@@ -103,14 +103,21 @@ public class HttpBinHandler extends AbstractHandler {
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
-            } else if (method.equals("POST") && uri.equals("/post")) {
-                Utils.copy(is, os);
-                servletResponse.setStatus(HttpServletResponse.SC_OK);
-                baseRequest.setHandled(true);
-                return;
-            } else if (method.equals("PUT") && uri.equals("/put")) {
-                Utils.copy(is, os);
-                servletResponse.setStatus(HttpServletResponse.SC_OK);
+            } else if ((method.equals("POST") && uri.equals("/post")) ||
+                    (method.equals("PUT") && uri.equals("/put"))) {
+                JSONObject response = new JSONObject();
+
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                Utils.copy(is, baos);
+                response.put("data", new JSONObject(new String(
+                        baos.toByteArray(), StandardCharsets.UTF_8)));
+
+                response.put("args", mapParametersToJSON(request));
+                response.put("headers", mapHeadersToJSON(request));
+                response.put("origin", request.getRemoteAddr());
+                response.put("url", getFullURL(request));
+
+                respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
             } else if (uri.equals("/redirect-to")) {

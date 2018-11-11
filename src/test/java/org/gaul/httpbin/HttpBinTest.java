@@ -20,11 +20,11 @@ package org.gaul.httpbin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
-import java.util.Random;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.BytesContentProvider;
+import org.eclipse.jetty.client.util.StringContentProvider;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -68,24 +68,24 @@ public final class HttpBinTest {
 
     @Test
     public void testPostData() throws Exception {
-        byte[] input = new byte[1024];
-        new Random().nextBytes(input);
+        String input = "{\"foo\": 42}";
         ContentResponse response = client.POST(httpBinEndpoint + "/post")
-                .content(new BytesContentProvider(input))
+                .content(new StringContentProvider(input))
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
-        assertThat(response.getContent()).isEqualTo(input);
+        JSONObject object = new JSONObject(response.getContentAsString());
+        assertThat(object.getJSONObject("data").getInt("foo")).isEqualTo(42);
     }
 
     @Test
     public void testPutData() throws Exception {
-        byte[] input = new byte[1024];
-        new Random().nextBytes(input);
+        String input = "{\"foo\": 42}";
         ContentResponse response = client.newRequest(httpBinEndpoint + "/put")
                 .method("PUT")
-                .content(new BytesContentProvider(input))
+                .content(new StringContentProvider(input))
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
-        assertThat(response.getContent()).isEqualTo(input);
+        JSONObject object = new JSONObject(response.getContentAsString());
+        assertThat(object.getJSONObject("data").getInt("foo")).isEqualTo(42);
     }
 }
