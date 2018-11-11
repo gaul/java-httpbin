@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
-import java.util.Enumeration;
+import java.util.List;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -35,6 +35,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -92,13 +93,15 @@ public class HttpBinHandler extends AbstractHandler {
                 return;
             } else if (method.equals("GET") && uri.equals("/get")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                // TODO: return JSON blob of request
-                String content = "Hello, world!";
-                servletResponse.setContentLength(content.length());
-                servletResponse.setStatus(HttpServletResponse.SC_OK);
+
+                JSONObject response = new JSONObject();
+                response.put("args", mapParametersToJSON(request));
+                response.put("headers", mapHeadersToJSON(request));
+                response.put("origin", request.getRemoteAddr());
+                response.put("url", getFullURL(request));
+
+                respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
-                writer.write(content);
-                writer.flush();
                 return;
             } else if (method.equals("POST") && uri.equals("/post")) {
                 Utils.copy(is, os);
@@ -208,15 +211,7 @@ public class HttpBinHandler extends AbstractHandler {
                 // Method
                 response.put("method", method);
 
-                // Headers
-                final JSONObject headers = new JSONObject();
-                response.put("headers", headers);
-
-                for (Enumeration<String> names = request.getHeaderNames();
-                        names.hasMoreElements();) {
-                    final String name = names.nextElement();
-                    headers.put(name, request.getHeader(name));
-                }
+                response.put("headers", mapHeadersToJSON(request));
 
                 // Body data
                 final ByteArrayOutputStream data = new ByteArrayOutputStream();
@@ -286,6 +281,47 @@ public class HttpBinHandler extends AbstractHandler {
         }
         try (InputStream is = getClass().getResourceAsStream(resource)) {
             Utils.copy(is, response.getOutputStream());
+        }
+    }
+
+    private static JSONObject mapHeadersToJSON(HttpServletRequest request) {
+        JSONObject headers = new JSONObject();
+
+        for (String name : Collections.list(request.getHeaderNames())) {
+            List<String> values = Collections.list(request.getHeaders(name));
+            if (values.size() == 1) {
+                headers.put(name, values.get(0));
+            } else {
+                headers.put(name, new JSONArray(values));
+            }
+        }
+
+        return headers;
+    }
+
+    private static JSONObject mapParametersToJSON(HttpServletRequest request) {
+        JSONObject headers = new JSONObject();
+
+        for (String name : Collections.list(request.getParameterNames())) {
+            String[] values = request.getParameterValues(name);
+            if (values.length == 1) {
+                headers.put(name, values[0]);
+            } else {
+                headers.put(name, new JSONArray(values));
+            }
+        }
+
+        return headers;
+    }
+
+    private static String getFullURL(HttpServletRequest request) {
+        StringBuilder requestURL = new StringBuilder(
+                request.getRequestURL().toString());
+        String queryString = request.getQueryString();
+        if (queryString == null) {
+            return requestURL.toString();
+        } else {
+            return requestURL.append('?').append(queryString).toString();
         }
     }
 }
