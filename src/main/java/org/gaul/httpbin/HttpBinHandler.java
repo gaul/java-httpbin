@@ -258,7 +258,8 @@ public class HttpBinHandler extends AbstractHandler {
 
     private static void respondJSON(HttpServletResponse response,
             OutputStream os, JSONObject obj) throws IOException {
-        final byte[] body = obj.toString().getBytes();
+        byte[] body = obj.toString(/*indent=*/ 2).getBytes(
+                StandardCharsets.UTF_8);
 
         response.setContentLength(body.length);
         response.setContentType("application/json");
