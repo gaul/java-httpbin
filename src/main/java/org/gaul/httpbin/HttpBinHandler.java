@@ -198,32 +198,16 @@ public class HttpBinHandler extends AbstractHandler {
                 return;
             } else if (uri.startsWith("/basic-auth/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                String header = request.getHeader("Authorization");
-                if (header == null || !header.startsWith("Basic ")) {
-                    servletResponse.setStatus(
-                            HttpServletResponse.SC_UNAUTHORIZED);
-                    baseRequest.setHandled(true);
-                    return;
-                }
-
-                byte[] bytes = Base64.getDecoder().decode(
-                        header.substring("Basic ".length()));
-                String[] parts = new String(
-                        bytes, StandardCharsets.UTF_8).split(":", 2);
-                String[] auth = uri.substring("/basic-auth/".length()).split(
-                        "/", 2);
-                if (auth.length != 2 || !Arrays.equals(auth, parts)) {
-                    servletResponse.setStatus(
-                            HttpServletResponse.SC_UNAUTHORIZED);
-                    baseRequest.setHandled(true);
-                    return;
-                }
-
-                JSONObject response = new JSONObject();
-                response.put("authenticated", true);
-                response.put("user", parts[0]);
-                respondJSON(servletResponse, os, response);
+                handleBasicAuth(request, servletResponse, os,
+                        uri.substring("/basic-auth/".length()),
+                        HttpServletResponse.SC_UNAUTHORIZED);
+                baseRequest.setHandled(true);
+                return;
+            } else if (uri.startsWith("/hidden-basic-auth/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                handleBasicAuth(request, servletResponse, os,
+                        uri.substring("/hidden-basic-auth/".length()),
+                        HttpServletResponse.SC_NOT_FOUND);
                 baseRequest.setHandled(true);
                 return;
             } else if (uri.equals("/anything")) {
@@ -347,5 +331,30 @@ public class HttpBinHandler extends AbstractHandler {
         } else {
             return requestURL.append('?').append(queryString).toString();
         }
+    }
+
+    private static void handleBasicAuth(HttpServletRequest request,
+            HttpServletResponse servletResponse, OutputStream os,
+            String suffix, int failureStatus) throws IOException {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Basic ")) {
+            servletResponse.setStatus(failureStatus);
+            return;
+        }
+
+        byte[] bytes = Base64.getDecoder().decode(
+                header.substring("Basic ".length()));
+        String[] parts = new String(
+                bytes, StandardCharsets.UTF_8).split(":", 2);
+        String[] auth = suffix.split("/", 2);
+        if (auth.length != 2 || !Arrays.equals(auth, parts)) {
+            servletResponse.setStatus(failureStatus);
+            return;
+        }
+
+        JSONObject response = new JSONObject();
+        response.put("authenticated", true);
+        response.put("user", parts[0]);
+        respondJSON(servletResponse, os, response);
     }
 }
