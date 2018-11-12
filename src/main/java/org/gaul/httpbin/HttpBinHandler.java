@@ -63,6 +63,9 @@ public class HttpBinHandler extends AbstractHandler {
                 int status = Integer.parseInt(uri.substring(
                         "/status/".length()));
                 servletResponse.setStatus(status);
+                if (status >= 300 && status < 400) {
+                    servletResponse.setHeader("Location", "/redirect/1");
+                }
                 baseRequest.setHandled(true);
                 return;
             } else if (method.equals("GET") && uri.equals("/headers")) {
