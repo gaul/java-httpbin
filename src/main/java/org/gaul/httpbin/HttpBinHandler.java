@@ -21,8 +21,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
@@ -59,7 +57,6 @@ public class HttpBinHandler extends AbstractHandler {
         String uri = request.getRequestURI();
         try (InputStream is = request.getInputStream();
              OutputStream os = servletResponse.getOutputStream()) {
-            Writer writer = new OutputStreamWriter(os, StandardCharsets.UTF_8);
             if (uri.startsWith("/status/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 int status = Integer.parseInt(uri.substring(
