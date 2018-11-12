@@ -25,6 +25,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/redirect-to?url=foo` 302 Redirects to the _foo_ URL.
 - `/cookies` Returns the cookies.
 - `/cookies/set?name=value` Sets one or more simple cookies.
+- `/cookies/delete?name` Deletes one or more simple cookies.
 - `/basic-auth/:user/:passwd` Challenges HTTP Basic Auth.
 - `/html` Returns some HTML.
 - `/xml` Returns some XML.

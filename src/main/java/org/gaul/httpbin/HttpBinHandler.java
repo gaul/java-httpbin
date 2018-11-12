@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -163,14 +164,32 @@ public class HttpBinHandler extends AbstractHandler {
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
-            } else if (uri.startsWith("/cookies/set/")) {
+            } else if (uri.startsWith("/cookies/set")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
-                String[] parts = uri.substring("/cookies/set/".length()).split(
-                        "/");
+                StringBuilder builder = new StringBuilder();
+                for (Map.Entry<String, String[]> entry :
+                        request.getParameterMap().entrySet()) {
+                    for (String value : entry.getValue()) {
+                        servletResponse.addHeader("Set-Cookie", String.format(
+                                "%s=%s; Path=/", entry.getKey(), value));
+                    }
+                }
 
-                servletResponse.addHeader("Set-Cookie",
-                        String.format("%s=%s; Path=/", parts[0], parts[1]));
+                servletResponse.setHeader("Location", "/cookies");
+                servletResponse.setStatus(
+                        HttpServletResponse.SC_MOVED_TEMPORARILY);
+                baseRequest.setHandled(true);
+                return;
+            } else if (uri.startsWith("/cookies/delete")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                StringBuilder builder = new StringBuilder();
+                for (Map.Entry<String, String[]> entry :
+                        request.getParameterMap().entrySet()) {
+                    servletResponse.addHeader("Set-Cookie", String.format(
+                            "%s=; Path=/", entry.getKey()));
+                }
 
                 servletResponse.setHeader("Location", "/cookies");
                 servletResponse.setStatus(
