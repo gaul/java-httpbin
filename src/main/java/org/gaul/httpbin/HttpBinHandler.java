@@ -275,6 +275,34 @@ public class HttpBinHandler extends AbstractHandler {
                 copyResource(servletResponse, "/text.xml");
                 baseRequest.setHandled(true);
                 return;
+            } else if (method.equals("GET") && uri.equals("/robots.txt")) {
+                byte[] output = "User-agent: *\nDisallow: /deny\n".getBytes(
+                        StandardCharsets.UTF_8);
+
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.setContentType("text/plain");
+                os.write(output);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/deny")) {
+                byte[] output = (
+                        "    .-''''''-." +
+                        "  .' _      _ '." +
+                        " /   O      O   \"" +
+                        ":                :" +
+                        "|                |" +
+                        ":       __       :" +
+                        " \\  .-\"'  '\"-.  /" +
+                        "  '.          .'" +
+                        "     '-......-'" +
+                        "YOU SHOULDN'T BE HERE").getBytes(
+                                StandardCharsets.UTF_8);
+
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.setContentType("text/plain");
+                os.write(output);
+                baseRequest.setHandled(true);
+                return;
             }
             servletResponse.setStatus(501);
             baseRequest.setHandled(true);
