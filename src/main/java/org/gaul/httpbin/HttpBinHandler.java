@@ -54,10 +54,18 @@ public class HttpBinHandler extends AbstractHandler {
             logger.trace("header: {}: {}", headerName,
                     request.getHeader(headerName));
         }
-        String method = request.getMethod();
-        String uri = request.getRequestURI();
         try (InputStream is = request.getInputStream();
              OutputStream os = servletResponse.getOutputStream()) {
+            handleHelper(baseRequest, request, servletResponse, is, os);
+        }
+    }
+
+    private void handleHelper(Request baseRequest, HttpServletRequest request,
+            HttpServletResponse servletResponse, InputStream is,
+            OutputStream os) throws IOException {
+        String method = request.getMethod();
+        String uri = request.getRequestURI();
+        try {
             if (uri.startsWith("/status/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 int status = Integer.parseInt(uri.substring(
