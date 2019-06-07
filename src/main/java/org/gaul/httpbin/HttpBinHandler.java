@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -273,6 +274,25 @@ public class HttpBinHandler extends AbstractHandler {
 
                 response.put("data", data.toString("UTF-8"));
                 respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.startsWith("/bytes/")) {
+                long length = Long.parseLong(uri.substring(
+                        "/bytes/".length()));
+                String seedString = request.getParameter("seed");
+                Random random = seedString != null ?
+                        new Random(Long.parseLong(seedString)) : new Random();
+
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.setContentLengthLong(length);
+                byte[] buffer = new byte[4096];
+                for (long i = 0; i < length;) {
+                    int count = (int) Math.min(buffer.length, length - i);
+                    random.nextBytes(buffer);
+                    os.write(buffer, 0, count);
+                    i += count;
+                }
                 baseRequest.setHandled(true);
                 return;
             } else if (method.equals("GET") && uri.equals("/image/jpeg")) {
