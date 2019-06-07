@@ -196,7 +196,6 @@ public class HttpBinHandler extends AbstractHandler {
             } else if (uri.startsWith("/cookies/set")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
-                StringBuilder builder = new StringBuilder();
                 for (Map.Entry<String, String[]> entry :
                         request.getParameterMap().entrySet()) {
                     for (String value : entry.getValue()) {
@@ -213,7 +212,6 @@ public class HttpBinHandler extends AbstractHandler {
             } else if (uri.startsWith("/cookies/delete")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
-                StringBuilder builder = new StringBuilder();
                 for (Map.Entry<String, String[]> entry :
                         request.getParameterMap().entrySet()) {
                     servletResponse.addHeader("Set-Cookie", String.format(

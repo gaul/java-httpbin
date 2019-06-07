@@ -31,7 +31,6 @@ import org.eclipse.jetty.server.ServerConnector;
  */
 public final class HttpBin {
     private final Server server;
-    private final HttpBinHandler handler;
 
     public HttpBin(URI endpoint) throws Exception {
         this(endpoint, new HttpBinHandler());
@@ -39,7 +38,6 @@ public final class HttpBin {
 
     public HttpBin(URI endpoint, HttpBinHandler handler) throws Exception {
         requireNonNull(endpoint);
-        this.handler = handler;
 
         server = new Server();
         HttpConnectionFactory httpConnectionFactory =
