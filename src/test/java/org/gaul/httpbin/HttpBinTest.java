@@ -74,7 +74,7 @@ public final class HttpBinTest {
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
-        assertThat(object.getJSONObject("data").getInt("foo")).isEqualTo(42);
+        assertThat(object.getString("data")).isEqualTo(input);
     }
 
     @Test
@@ -86,6 +86,6 @@ public final class HttpBinTest {
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
-        assertThat(object.getJSONObject("data").getInt("foo")).isEqualTo(42);
+        assertThat(object.getString("data")).isEqualTo(input);
     }
 }

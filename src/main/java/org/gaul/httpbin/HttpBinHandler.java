@@ -118,8 +118,8 @@ public class HttpBinHandler extends AbstractHandler {
 
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 Utils.copy(is, baos);
-                response.put("data", new JSONObject(new String(
-                        baos.toByteArray(), StandardCharsets.UTF_8)));
+                response.put("data", new String(
+                        baos.toByteArray(), StandardCharsets.UTF_8));
 
                 response.put("args", mapParametersToJSON(request));
                 response.put("headers", mapHeadersToJSON(request));
