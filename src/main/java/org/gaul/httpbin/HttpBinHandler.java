@@ -23,7 +23,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +31,7 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.codec.binary.Base64;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.json.JSONArray;
@@ -399,7 +399,7 @@ public class HttpBinHandler extends AbstractHandler {
             return;
         }
 
-        byte[] bytes = Base64.getDecoder().decode(
+        byte[] bytes = Base64.decodeBase64(
                 header.substring("Basic ".length()));
         String[] parts = new String(
                 bytes, StandardCharsets.UTF_8).split(":", 2);
