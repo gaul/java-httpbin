@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -159,6 +160,26 @@ public class HttpBinHandler extends AbstractHandler {
                 response.put("url", getFullURL(request));
 
                 respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/drip")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                long durationMs = (long) (1000 * Utils.getDoubleParameter(
+                        request, "duration", 0.0));
+                int numBytes = Utils.getIntParameter(request, "numbytes", 10);
+                int code = Utils.getIntParameter(request, "code", 200);
+                int delay = Utils.getIntParameter(request, "delay", 0);
+
+                servletResponse.setStatus(code);
+                Utils.sleepUninterruptibly(delay, TimeUnit.SECONDS);
+
+                for (int i = 0; i < numBytes; ++i) {
+                    Utils.sleepUninterruptibly(durationMs / numBytes,
+                            TimeUnit.MILLISECONDS);
+                    os.write('*');
+                }
+
                 baseRequest.setHandled(true);
                 return;
             } else if ((method.equals("POST") && uri.equals("/post")) ||
@@ -307,9 +328,8 @@ public class HttpBinHandler extends AbstractHandler {
             } else if (method.equals("GET") && uri.startsWith("/bytes/")) {
                 long length = Long.parseLong(uri.substring(
                         "/bytes/".length()));
-                String seedString = request.getParameter("seed");
-                Random random = seedString != null ?
-                        new Random(Long.parseLong(seedString)) : new Random();
+                int seed = Utils.getIntParameter(request, "seed", -1);
+                Random random = seed != -1 ?  new Random(seed) : new Random();
 
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 servletResponse.setStatus(HttpServletResponse.SC_OK);

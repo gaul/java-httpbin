@@ -20,6 +20,9 @@ package org.gaul.httpbin;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.concurrent.TimeUnit;
+
+import javax.servlet.http.HttpServletRequest;
 
 final class Utils {
     static final OutputStream NULL_OUTPUT_STREAM = new OutputStream() {
@@ -52,5 +55,45 @@ final class Utils {
             total += r;
         }
         return total;
+    }
+
+    static void sleepUninterruptibly(long sleepFor, TimeUnit unit) {
+        boolean interrupted = false;
+        try {
+            long remainingNanos = unit.toNanos(sleepFor);
+            long end = System.nanoTime() + remainingNanos;
+            while (true) {
+                try {
+                    // TimeUnit.sleep() treats negative timeouts just like zero.
+                    TimeUnit.NANOSECONDS.sleep(remainingNanos);
+                    return;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                    remainingNanos = end - System.nanoTime();
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    static int getIntParameter(HttpServletRequest request, String name,
+            int defaultValue) {
+        String value = request.getParameter(name);
+        if (value == null) {
+            return defaultValue;
+        }
+        return Integer.parseInt(value);
+    }
+
+    static double getDoubleParameter(HttpServletRequest request, String name,
+            double defaultValue) {
+        String value = request.getParameter(name);
+        if (value == null) {
+            return defaultValue;
+        }
+        return Double.parseDouble(value);
     }
 }

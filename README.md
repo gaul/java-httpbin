@@ -29,6 +29,8 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/cookies` Returns the cookies.
 - `/cookies/set?name=value` Sets one or more simple cookies.
 - `/cookies/delete?name` Deletes one or more simple cookies.
+- `/drip?numbytes=n&duration=s&delay=s&code=code` Drips data over a duration after
+  an optional initial _delay_, then optionally returns with the given status _code_.
 - `/cache` Returns 200 unless an If-Modified-Since or If-None-Match header is provided, when it returns a 304.
 - `/robots.txt` Returns some robots.txt rules.
 - `/deny` Denied by robots.txt file.
