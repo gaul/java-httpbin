@@ -68,7 +68,14 @@ public class HttpBinHandler extends AbstractHandler {
         String method = request.getMethod();
         String uri = request.getRequestURI();
         try {
-            if (uri.startsWith("/status/")) {
+            if (uri.equals("/")) {
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                servletResponse.addHeader("Content-Type",
+                        "text/html; charset=utf-8");
+                copyResource(servletResponse, "/home.html");
+                baseRequest.setHandled(true);
+                return;
+            } else if (uri.startsWith("/status/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 int status = Integer.parseInt(uri.substring(
                         "/status/".length()));
