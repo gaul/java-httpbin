@@ -34,6 +34,8 @@ Java httpbin supports a subset of httpbin endpoints:
   an optional initial _delay_, then optionally returns with the given status _code_.
 - `/cache` Returns 200 unless an If-Modified-Since or If-None-Match header is provided, when it returns a 304.
 - `/cache/:n` Sets a Cache-Control header for _n_ seconds.
+- `/gzip` Returns gzip-encoded data.
+- `/deflate` Returns deflate-encoded data.
 - `/robots.txt` Returns some robots.txt rules.
 - `/deny` Denied by robots.txt file.
 - `/basic-auth/:user/:passwd` Challenges HTTP Basic Auth.

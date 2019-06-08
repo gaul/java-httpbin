@@ -28,6 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.GZIPOutputStream;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
@@ -123,6 +126,62 @@ public class HttpBinHandler extends AbstractHandler {
                 response.put("url", getFullURL(request));
 
                 respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/gzip")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                JSONObject response = new JSONObject();
+                response.put("args", mapParametersToJSON(request));
+                response.put("headers", mapHeadersToJSON(request));
+                response.put("origin", request.getRemoteAddr());
+                response.put("url", getFullURL(request));
+                response.put("gzipped", true);
+
+                byte[] uncompressed = response.toString(/*indent=*/ 2).getBytes(
+                        StandardCharsets.UTF_8);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(
+                        uncompressed.length);
+                try (GZIPOutputStream gzipos = new GZIPOutputStream(baos)) {
+                    gzipos.write(uncompressed);
+                }
+                byte[] compressed = baos.toByteArray();
+
+                servletResponse.setContentLength(compressed.length);
+                servletResponse.setHeader("Content-Encoding", "gzip");
+                servletResponse.setContentType("application/json");
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                os.write(compressed);
+                os.flush();
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.equals("/deflate")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                JSONObject response = new JSONObject();
+                response.put("args", mapParametersToJSON(request));
+                response.put("headers", mapHeadersToJSON(request));
+                response.put("origin", request.getRemoteAddr());
+                response.put("url", getFullURL(request));
+                response.put("deflated", true);
+
+                byte[] uncompressed = response.toString(/*indent=*/ 2).getBytes(
+                        StandardCharsets.UTF_8);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(
+                        uncompressed.length);
+                try (DeflaterOutputStream dos = new DeflaterOutputStream(
+                        baos, new Deflater(Deflater.DEFAULT_COMPRESSION,
+                                /*nowrap=*/ true))) {
+                    dos.write(uncompressed);
+                }
+                byte[] compressed = baos.toByteArray();
+
+                servletResponse.setContentLength(compressed.length);
+                servletResponse.setHeader("Content-Encoding", "deflate");
+                servletResponse.setContentType("application/json");
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                os.write(compressed);
+                os.flush();
                 baseRequest.setHandled(true);
                 return;
             } else if (method.equals("GET") && uri.equals("/cache")) {
