@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
 public class HttpBinHandler extends AbstractHandler {
     private static final Logger logger = LoggerFactory.getLogger(
             HttpBinHandler.class);
+    private static final int MAX_DELAY_MS = 10 * 1000;
 
     @Override
     public void handle(String target, Request baseRequest,
@@ -122,6 +123,26 @@ public class HttpBinHandler extends AbstractHandler {
                             HttpServletResponse.SC_NOT_MODIFIED);
                     baseRequest.setHandled(true);
                     return;
+                }
+
+                JSONObject response = new JSONObject();
+                response.put("args", mapParametersToJSON(request));
+                response.put("headers", mapHeadersToJSON(request));
+                response.put("origin", request.getRemoteAddr());
+                response.put("url", getFullURL(request));
+
+                respondJSON(servletResponse, os, response);
+                baseRequest.setHandled(true);
+                return;
+            } else if (method.equals("GET") && uri.startsWith("/delay/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                int delayMs = (int) (1000 * Double.parseDouble(uri.substring(
+                        "/delay/".length())));
+                try {
+                    Thread.sleep(Math.min(delayMs, MAX_DELAY_MS));
+                } catch (InterruptedException ie) {
+                    // ignore
                 }
 
                 JSONObject response = new JSONObject();
