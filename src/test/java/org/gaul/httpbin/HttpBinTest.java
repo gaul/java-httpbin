@@ -70,19 +70,42 @@ public final class HttpBinTest {
     public void testPostData() throws Exception {
         String input = "{\"foo\": 42}";
         ContentResponse response = client.POST(httpBinEndpoint + "/post")
-                .content(new StringContentProvider(input))
+                .content(new StringContentProvider(input), "application/json")
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
         assertThat(object.getString("data")).isEqualTo(input);
     }
 
+    // TODO: requires Jetty 9.3 which requires Java 8
+/*
+    @Test
+    public void testPostDataMultipartContent() throws Exception {
+        JSONObject input = new JSONObject();
+        input.put("field1", "foo");
+        input.put("field2", "bar");
+        MultiPartContentProvider multiPart = new MultiPartContentProvider();
+        multiPart.addFieldPart("field1", new StringContentProvider("foo"),
+                null);
+        multiPart.addFieldPart("field2", new StringContentProvider("bar"),
+                null);
+        multiPart.close();
+
+        ContentResponse response = client.POST(httpBinEndpoint + "/post")
+                .content(multiPart)
+                .send();
+        assertThat(response.getStatus()).as("status").isEqualTo(200);
+        JSONObject object = new JSONObject(response.getContentAsString());
+        assertThat(object.getJSONObject("data").similar(input)).isTrue();
+    }
+*/
+
     @Test
     public void testPutData() throws Exception {
         String input = "{\"foo\": 42}";
         ContentResponse response = client.newRequest(httpBinEndpoint + "/put")
                 .method("PUT")
-                .content(new StringContentProvider(input))
+                .content(new StringContentProvider(input), "application/json")
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());

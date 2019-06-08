@@ -29,13 +29,16 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.Part;
 
 import org.apache.commons.codec.binary.Base64;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
+import org.eclipse.jetty.util.MultiPartInputStreamParser;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -231,10 +234,34 @@ public class HttpBinHandler extends AbstractHandler {
                     (method.equals("PUT") && uri.equals("/put"))) {
                 JSONObject response = new JSONObject();
 
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                Utils.copy(is, baos);
-                response.put("data", new String(
-                        baos.toByteArray(), StandardCharsets.UTF_8));
+                String contentType = request.getContentType();
+                if (contentType == null ||
+                        contentType.equals("application/json")) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    Utils.copy(is, baos);
+                    response.put("data", new String(
+                            baos.toByteArray(), StandardCharsets.UTF_8));
+                } else if (contentType.startsWith("multipart/form-data")) {
+                    MultiPartInputStreamParser parser =
+                            new MultiPartInputStreamParser(
+                                    is, contentType, null, null);
+
+                    JSONObject data = new JSONObject();
+                    for (Part part : parser.getParts()) {
+                        ByteArrayOutputStream baos =
+                                new ByteArrayOutputStream();
+                        try (InputStream pis = part.getInputStream()) {
+                            Utils.copy(pis, baos);
+                        }
+                        data.put(part.getName(), new String(baos.toByteArray(),
+                                StandardCharsets.UTF_8));
+                    }
+                    response.put("data", data);
+                } else {
+                    servletResponse.setStatus(501);
+                    baseRequest.setHandled(true);
+                    return;
+                }
 
                 response.put("args", mapParametersToJSON(request));
                 response.put("headers", mapHeadersToJSON(request));
@@ -446,6 +473,9 @@ public class HttpBinHandler extends AbstractHandler {
             servletResponse.setStatus(501);
             baseRequest.setHandled(true);
         } catch (JSONException e) {
+            servletResponse.setStatus(500);
+            baseRequest.setHandled(true);
+        } catch (ServletException e) {
             servletResponse.setStatus(500);
             baseRequest.setHandled(true);
         }
