@@ -3,9 +3,9 @@
 [![Build Status](https://travis-ci.org/gaul/java-httpbin.svg?branch=master)](https://travis-ci.org/gaul/java-httpbin)
 [![Maven Central](https://img.shields.io/maven-central/v/org.gaul/httpbin.svg)](https://search.maven.org/#search%7Cga%7C1%7Ca%3A%22httpbin%22)
 
-A Java-based HTTP server that lets you test your HTTP client, retry logic,
-streaming behavior, timeouts etc. with the endpoints of
-[httpbin.org](https://httpbin.org/) locally.
+A Java-based HTTP server that lets you locally test your HTTP client, retry
+logic, streaming behavior, timeouts, etc. with the endpoints of
+[httpbin.org](https://httpbin.org/).
 
 This way, you can write tests without relying on an external dependency like
 httpbin.org.
