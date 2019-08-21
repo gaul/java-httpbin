@@ -416,7 +416,16 @@ public class HttpBinHandler extends AbstractHandler {
                 int count = Integer.parseInt(uri.substring(
                         "/redirect/".length())) - 1;
                 if (count > 0) {
-                    redirectTo(servletResponse, "/redirect/" + count);
+                    StringBuilder path = new StringBuilder();
+                    if ("true".equals(request.getParameter("absolute"))) {
+                        path.append(request.getRequestURL());
+                        path.setLength(path.length() - uri.length());
+                        path.append("/absolute-redirect/");
+                    } else {
+                        path.append("/relative-redirect/");
+                    }
+                    path.append(count);
+                    redirectTo(servletResponse, path.toString());
                 } else {
                     redirectTo(servletResponse, "/get");
                 }
