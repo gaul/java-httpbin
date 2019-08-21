@@ -485,15 +485,17 @@ public class HttpBinHandler extends AbstractHandler {
                         HttpServletResponse.SC_NOT_FOUND);
                 baseRequest.setHandled(true);
                 return;
-            } else if (uri.equals("/anything")) {
+            } else if (uri.startsWith("/anything")) {
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
 
                 final JSONObject response = new JSONObject();
 
                 // Method
                 response.put("method", method);
-
+                response.put("args", mapParametersToJSON(request));
                 response.put("headers", mapHeadersToJSON(request));
+                response.put("origin", request.getRemoteAddr());
+                response.put("url", getFullURL(request));
 
                 // Body data
                 final ByteArrayOutputStream data = new ByteArrayOutputStream();
