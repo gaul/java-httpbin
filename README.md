@@ -17,7 +17,9 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/ip` Returns Origin IP.
 - `/user-agent` Returns user-agent.
 - `/headers` Returns headers.
+- `/delete` Returns DELETE data.
 - `/get` Returns GET data.
+- `/patch` Returns PATCH data.
 - `/post` Returns POST data.
 - `/put`  Returns PUT data.
 - `/status/:code` Returns given HTTP Status code.
@@ -34,6 +36,7 @@ Java httpbin supports a subset of httpbin endpoints:
   an optional initial _delay_, then optionally returns with the given status _code_.
 - `/cache` Returns 200 unless an If-Modified-Since or If-None-Match header is provided, when it returns a 304.
 - `/cache/:n` Sets a Cache-Control header for _n_ seconds.
+- `/etag` Return 200 when If-Match or If-None-Match succeed.
 - `/gzip` Returns gzip-encoded data.
 - `/deflate` Returns deflate-encoded data.
 - `/robots.txt` Returns some robots.txt rules.
