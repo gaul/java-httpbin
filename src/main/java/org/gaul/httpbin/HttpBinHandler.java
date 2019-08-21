@@ -248,6 +248,41 @@ public class HttpBinHandler extends AbstractHandler {
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
+            } else if (method.equals("GET") && uri.startsWith("/etag/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                String eTag = uri.substring("/etag/".length());
+
+                String ifMatch = request.getHeader("If-Match");
+                if (ifMatch == null) {
+                    // nothing
+                } else if (ifMatch.equals("*") || ifMatch.equals(eTag)) {
+                    servletResponse.setStatus(HttpServletResponse.SC_OK);
+                    servletResponse.setHeader("ETag", eTag);
+                    baseRequest.setHandled(true);
+                    return;
+                } else {
+                    servletResponse.setStatus(
+                            HttpServletResponse.SC_PRECONDITION_FAILED);
+                    baseRequest.setHandled(true);
+                    return;
+                }
+
+                String ifNoneMatch = request.getHeader("If-None-Match");
+                if (ifNoneMatch == null) {
+                    // nothing
+                } else if (ifNoneMatch.equals("*") || ifNoneMatch.equals(
+                        eTag)) {
+                    servletResponse.setStatus(
+                            HttpServletResponse.SC_NOT_MODIFIED);
+                    servletResponse.setHeader("ETag", eTag);
+                    baseRequest.setHandled(true);
+                    return;
+                }
+
+                servletResponse.setHeader("ETag", eTag);
+                baseRequest.setHandled(true);
+                return;
             } else if (method.equals("GET") && uri.equals("/drip")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
