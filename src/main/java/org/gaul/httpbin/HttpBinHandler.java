@@ -338,6 +338,29 @@ public class HttpBinHandler extends AbstractHandler {
 
                 baseRequest.setHandled(true);
                 return;
+            } else if (method.equals("GET") && uri.startsWith(
+                    "/stream-bytes/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                long numBytes = Long.parseLong(uri.substring(
+                        "/stream-bytes/".length()));
+
+                int seed = Utils.getIntParameter(request, "seed", -1);
+                int chunkSize = Utils.getIntParameter(request, "chunkSize",
+                        200);
+                byte[] buf = new byte[chunkSize];
+                Random random = seed == -1 ? new Random() : new Random(seed);
+
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+
+                for (long i = 0; i < numBytes; i += chunkSize) {
+                    random.nextBytes(buf);
+                    os.write(buf, 0, i + chunkSize > numBytes ?
+                            (int) (numBytes - i) : chunkSize);
+                }
+
+                baseRequest.setHandled(true);
+                return;
             } else if ((method.equals("POST") && uri.equals("/post")) ||
                     (method.equals("PUT") && uri.equals("/put"))) {
                 JSONObject response = new JSONObject();
