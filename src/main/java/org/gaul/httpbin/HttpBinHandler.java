@@ -84,8 +84,15 @@ public class HttpBinHandler extends AbstractHandler {
                 return;
             } else if (uri.startsWith("/status/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                int status = Integer.parseInt(uri.substring(
-                        "/status/".length()));
+                int status;
+                try {
+                    status = Integer.parseInt(uri.substring(
+                            "/status/".length()));
+                } catch (NumberFormatException nfe) {
+                    servletResponse.setStatus(400);
+                    baseRequest.setHandled(true);
+                    return;
+                }
                 servletResponse.setStatus(status);
                 if (status >= 300 && status < 400) {
                     servletResponse.setHeader("Location", "/redirect/1");
