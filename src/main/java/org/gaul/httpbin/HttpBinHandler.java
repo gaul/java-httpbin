@@ -254,6 +254,11 @@ public class HttpBinHandler extends AbstractHandler {
                 long durationMs = (long) (1000 * Utils.getDoubleParameter(
                         request, "duration", 0.0));
                 int numBytes = Utils.getIntParameter(request, "numbytes", 10);
+                if (numBytes <= 0) {
+                    servletResponse.setStatus(400);
+                    baseRequest.setHandled(true);
+                    return;
+                }
                 int code = Utils.getIntParameter(request, "code", 200);
                 int delay = Utils.getIntParameter(request, "delay", 0);
 
