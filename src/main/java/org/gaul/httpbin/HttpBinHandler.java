@@ -404,7 +404,10 @@ public class HttpBinHandler extends AbstractHandler {
                 return;
             } else if (uri.equals("/redirect-to")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                redirectTo(servletResponse, request.getParameter("url"));
+                int statusCode = Utils.getIntParameter(request, "status_code",
+                        HttpServletResponse.SC_MOVED_TEMPORARILY);
+                redirectTo(servletResponse, request.getParameter("url"),
+                        statusCode);
                 baseRequest.setHandled(true);
                 return;
             } else if (uri.startsWith("/redirect/")) {
@@ -627,9 +630,15 @@ public class HttpBinHandler extends AbstractHandler {
     }
 
     private static void redirectTo(HttpServletResponse response,
-            String location) {
+            String location, int statusCode) {
         response.setHeader("Location", location);
-        response.setStatus(HttpServletResponse.SC_MOVED_TEMPORARILY);
+        response.setStatus(statusCode);
+    }
+
+    private static void redirectTo(HttpServletResponse response,
+            String location) {
+        redirectTo(response, location,
+                HttpServletResponse.SC_MOVED_TEMPORARILY);
     }
 
     private void copyResource(HttpServletResponse response, String resource)
