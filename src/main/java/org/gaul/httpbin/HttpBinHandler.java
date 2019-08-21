@@ -366,13 +366,8 @@ public class HttpBinHandler extends AbstractHandler {
                 JSONObject response = new JSONObject();
 
                 String contentType = request.getContentType();
-                if (contentType == null ||
-                        contentType.equals("application/json")) {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    Utils.copy(is, baos);
-                    response.put("data", new String(
-                            baos.toByteArray(), StandardCharsets.UTF_8));
-                } else if (contentType.startsWith("multipart/form-data")) {
+                if (contentType != null && contentType.startsWith(
+                        "multipart/form-data")) {
                     MultiPartInputStreamParser parser =
                             new MultiPartInputStreamParser(
                                     is, contentType, null, null);
@@ -389,9 +384,10 @@ public class HttpBinHandler extends AbstractHandler {
                     }
                     response.put("data", data);
                 } else {
-                    servletResponse.setStatus(501);
-                    baseRequest.setHandled(true);
-                    return;
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    Utils.copy(is, baos);
+                    response.put("data", new String(
+                            baos.toByteArray(), StandardCharsets.UTF_8));
                 }
 
                 response.put("args", mapParametersToJSON(request));
