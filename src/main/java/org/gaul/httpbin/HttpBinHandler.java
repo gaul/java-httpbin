@@ -123,7 +123,9 @@ public class HttpBinHandler extends AbstractHandler {
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
-            } else if (method.equals("GET") && uri.equals("/get")) {
+            } else if ((method.equals("DELETE") && uri.equals("/delete")) ||
+                    (method.equals("GET") && uri.equals("/get")) ||
+                    (method.equals("PATCH") && uri.equals("/patch"))) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 JSONObject response = new JSONObject();
