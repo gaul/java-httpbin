@@ -100,7 +100,7 @@ public void test() throws Exception {
 
 ## License
 
-Copyright (C) 2018 Andrew Gaul<br />
+Copyright (C) 2018-2019 Andrew Gaul<br />
 Copyright (C) 2015-2016 Bounce Storage
 
 Licensed under the Apache License, Version 2.0
