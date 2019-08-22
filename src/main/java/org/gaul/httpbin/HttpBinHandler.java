@@ -371,7 +371,9 @@ public class HttpBinHandler extends AbstractHandler {
                         data.put(part.getName(), new String(baos.toByteArray(),
                                 StandardCharsets.UTF_8));
                     }
-                    response.put("data", data);
+                    response.put("data", "");
+                    response.put("form", data);
+                    response.put("json", JSONObject.NULL);
                 } else {
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     Utils.copy(is, baos);
