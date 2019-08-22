@@ -562,6 +562,57 @@ public class HttpBinHandler extends AbstractHandler {
                 os.flush();
                 baseRequest.setHandled(true);
                 return;
+            } else if (method.equals("GET") && uri.startsWith("/range/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                long size = Long.parseLong(uri.substring("/range/".length()));
+                long start;
+                long end;
+                String range = request.getHeader("Range");
+                if (range != null && range.startsWith("bytes=")) {
+                    range = range.substring("bytes=".length());
+                    String[] ranges = range.split("-", 2);
+                    if (ranges[0].isEmpty()) {
+                        start = size - Long.parseLong(ranges[1]);
+                        end = size - 1;
+                    } else if (ranges[1].isEmpty()) {
+                        start = Long.parseLong(ranges[0]);
+                        end = size - 1;
+                    } else {
+                        start = Long.parseLong(ranges[0]);
+                        end = Long.parseLong(ranges[1]);
+                    }
+                    if (end + 1 > size || start > end) {
+                        servletResponse.setStatus(HttpServletResponse.
+                                SC_REQUESTED_RANGE_NOT_SATISFIABLE);
+                        servletResponse.addHeader("ETag", "range" + size);
+                        servletResponse.addHeader("Content-Range",
+                                "bytes */" + size);
+                        baseRequest.setHandled(true);
+                        return;
+                    }
+                    servletResponse.setStatus(
+                            HttpServletResponse.SC_PARTIAL_CONTENT);
+                } else {
+                    start = 0;
+                    end = size - 1;
+                    servletResponse.setStatus(HttpServletResponse.SC_OK);
+                }
+
+                servletResponse.addHeader("ETag", "range" + size);
+                servletResponse.addHeader("Content-Length",
+                        String.valueOf(end - start + 1));
+                servletResponse.addHeader("Content-Range",
+                        "bytes " + start + "-" + end + "/" + size);
+                servletResponse.addHeader("Accept-ranges", "bytes");
+
+                for (long i = start; i <= end; ++i) {
+                    os.write((char) ('a' + (i % 26)));
+                }
+                os.flush();
+
+                baseRequest.setHandled(true);
+                return;
             } else if (method.equals("GET") && uri.equals("/image/jpeg")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 servletResponse.setStatus(HttpServletResponse.SC_OK);

@@ -31,6 +31,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/delay/:n` Delays responding for _min(n, 10)_ seconds.
 - `/bytes/:n` Generates _n_ random bytes of binary data, accepts optional _seed_ integer parameter.
 - `/base64/:s` Returns a base64 decoded :s input
+- `/range/:s` Return a subset of data based on Content-range header.
 - `/cookies` Returns the cookies.
 - `/cookies/set?name=value` Sets one or more simple cookies.
 - `/cookies/delete?name` Deletes one or more simple cookies.
