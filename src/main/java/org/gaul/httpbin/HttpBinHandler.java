@@ -556,6 +556,15 @@ public class HttpBinHandler extends AbstractHandler {
                 }
                 baseRequest.setHandled(true);
                 return;
+            } else if (method.equals("GET") && uri.startsWith("/base64/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                byte[] body = Base64.decodeBase64(
+                        uri.substring("/base64/".length()));
+                servletResponse.setStatus(HttpServletResponse.SC_OK);
+                os.write(body);
+                os.flush();
+                baseRequest.setHandled(true);
+                return;
             } else if (method.equals("GET") && uri.equals("/image/jpeg")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
