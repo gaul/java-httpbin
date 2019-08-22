@@ -123,20 +123,6 @@ public class HttpBinHandler extends AbstractHandler {
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
-            } else if ((method.equals("DELETE") && uri.equals("/delete")) ||
-                    (method.equals("GET") && uri.equals("/get")) ||
-                    (method.equals("PATCH") && uri.equals("/patch"))) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                JSONObject response = new JSONObject();
-                response.put("args", mapParametersToJSON(request));
-                response.put("headers", mapHeadersToJSON(request));
-                response.put("origin", request.getRemoteAddr());
-                response.put("url", getFullURL(request));
-
-                respondJSON(servletResponse, os, response);
-                baseRequest.setHandled(true);
-                return;
             } else if (method.equals("GET") && uri.equals("/gzip")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
@@ -361,7 +347,10 @@ public class HttpBinHandler extends AbstractHandler {
 
                 baseRequest.setHandled(true);
                 return;
-            } else if ((method.equals("POST") && uri.equals("/post")) ||
+            } else if ((method.equals("DELETE") && uri.equals("/delete")) ||
+                    (method.equals("GET") && uri.equals("/get")) ||
+                    (method.equals("PATCH") && uri.equals("/patch")) ||
+                    (method.equals("POST") && uri.equals("/post")) ||
                     (method.equals("PUT") && uri.equals("/put"))) {
                 JSONObject response = new JSONObject();
 
@@ -386,8 +375,14 @@ public class HttpBinHandler extends AbstractHandler {
                 } else {
                     ByteArrayOutputStream baos = new ByteArrayOutputStream();
                     Utils.copy(is, baos);
-                    response.put("data", new String(
-                            baos.toByteArray(), StandardCharsets.UTF_8));
+                    String string = new String(
+                            baos.toByteArray(), StandardCharsets.UTF_8);
+                    response.put("data", string);
+                    try {
+                        response.put("json", new JSONObject(string));
+                    } catch (JSONException e) {
+                        // client can provide non-JSON data
+                    }
                 }
 
                 response.put("args", mapParametersToJSON(request));
@@ -623,9 +618,11 @@ public class HttpBinHandler extends AbstractHandler {
             servletResponse.setStatus(501);
             baseRequest.setHandled(true);
         } catch (JSONException e) {
+            logger.trace("JSONException", e);
             servletResponse.setStatus(500);
             baseRequest.setHandled(true);
         } catch (ServletException e) {
+            logger.trace("ServletException", e);
             servletResponse.setStatus(500);
             baseRequest.setHandled(true);
         }
