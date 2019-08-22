@@ -89,7 +89,8 @@ public class HttpBinHandler extends AbstractHandler {
                     status = Integer.parseInt(uri.substring(
                             "/status/".length()));
                 } catch (NumberFormatException nfe) {
-                    servletResponse.setStatus(400);
+                    servletResponse.setStatus(
+                            HttpServletResponse.SC_BAD_REQUEST);
                     baseRequest.setHandled(true);
                     return;
                 }
@@ -278,7 +279,8 @@ public class HttpBinHandler extends AbstractHandler {
                         request, "duration", 0.0));
                 int numBytes = Utils.getIntParameter(request, "numbytes", 10);
                 if (numBytes <= 0) {
-                    servletResponse.setStatus(400);
+                    servletResponse.setStatus(
+                            HttpServletResponse.SC_BAD_REQUEST);
                     baseRequest.setHandled(true);
                     return;
                 }
