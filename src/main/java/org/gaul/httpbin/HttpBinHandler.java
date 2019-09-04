@@ -405,11 +405,14 @@ public class HttpBinHandler extends AbstractHandler {
                         statusCode);
                 baseRequest.setHandled(true);
                 return;
-            } else if (uri.startsWith("/redirect/")) {
+            } else if (uri.startsWith("/redirect/") ||
+                    uri.startsWith("/relative-redirect/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int count = Integer.parseInt(uri.substring(
-                        "/redirect/".length())) - 1;
+                        uri.startsWith("/redirect/") ?
+                                "/redirect/".length() :
+                                "/relative-redirect/".length())) - 1;
                 if (count > 0) {
                     StringBuilder path = new StringBuilder();
                     if ("true".equals(request.getParameter("absolute"))) {

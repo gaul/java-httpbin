@@ -24,6 +24,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/put`  Returns PUT data.
 - `/status/:code` Returns given HTTP Status code.
 - `/redirect/:n` 302 Redirects _n_ times.
+- `/relative-redirect/:n` 302 Redirects _n_ times.
 - `/absolute-redirect/:n` 302 Absolute redirects _n_ times.
 - `/redirect-to?url=foo` 302 Redirects to the _foo_ URL.
 - `/stream/:n` Streams _n_ lines of JSON objects.
