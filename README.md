@@ -22,6 +22,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/patch` Returns PATCH data.
 - `/post` Returns POST data.
 - `/put`  Returns PUT data.
+- `/anything` Returns anything passed in request data.
 - `/status/:code` Returns given HTTP Status code.
 - `/redirect/:n` 302 Redirects _n_ times.
 - `/relative-redirect/:n` 302 Redirects _n_ times.
