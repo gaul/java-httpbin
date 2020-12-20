@@ -72,7 +72,7 @@ private URI httpBinEndpoint = URI.create("http://127.0.0.1:0");
 private final HttpBin httpBin = new HttpBin(httpBinEndpoint);
 
 @Before
-public setUp() {
+public void setUp() throws Exception {
     httpBin.start();
 
     // reset endpoint to handle zero port
