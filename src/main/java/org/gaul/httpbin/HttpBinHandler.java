@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 
-import org.apache.commons.codec.binary.Base64;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.util.MultiPartInputStreamParser;
@@ -536,7 +536,7 @@ public class HttpBinHandler extends AbstractHandler {
                 final ByteArrayOutputStream data = new ByteArrayOutputStream();
                 Utils.copy(is, data);
 
-                response.put("data", data.toString("UTF-8"));
+                response.put("data", data.toString(StandardCharsets.UTF_8));
                 respondJSON(servletResponse, os, response);
                 baseRequest.setHandled(true);
                 return;
@@ -560,7 +560,7 @@ public class HttpBinHandler extends AbstractHandler {
                 return;
             } else if (method.equals("GET") && uri.startsWith("/base64/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                byte[] body = Base64.decodeBase64(
+                byte[] body = Base64.getDecoder().decode(
                         uri.substring("/base64/".length()));
                 servletResponse.setStatus(HttpServletResponse.SC_OK);
                 os.write(body);
@@ -771,7 +771,7 @@ public class HttpBinHandler extends AbstractHandler {
             return;
         }
 
-        byte[] bytes = Base64.decodeBase64(
+        byte[] bytes = Base64.getDecoder().decode(
                 header.substring("Basic ".length()));
         String[] parts = new String(
                 bytes, StandardCharsets.UTF_8).split(":", 2);
