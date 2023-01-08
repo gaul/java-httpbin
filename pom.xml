@@ -236,6 +236,26 @@
           <omitVisitors>CrossSiteScripting</omitVisitors>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>enforce-maven</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireMavenVersion>
+                  <version>3.0.5</version>
+                </requireMavenVersion>
+              </rules>    
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
@@ -244,10 +264,6 @@
     <java.version>11</java.version>
     <jetty.version>9.2.28.v20190418</jetty.version>
   </properties>
-
-  <prerequisites>
-    <maven>3.0.5</maven>
-  </prerequisites>
 
   <dependencies>
     <dependency>
