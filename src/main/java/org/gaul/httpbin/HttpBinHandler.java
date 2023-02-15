@@ -33,20 +33,19 @@ import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPOutputStream;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.Part;
-
+import org.eclipse.jetty.server.MultiPartFormInputStream;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.util.MultiPartInputStreamParser;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 
 public class HttpBinHandler extends AbstractHandler {
     private static final Logger logger = LoggerFactory.getLogger(
@@ -359,8 +358,8 @@ public class HttpBinHandler extends AbstractHandler {
                 String contentType = request.getContentType();
                 if (contentType != null && contentType.startsWith(
                         "multipart/form-data")) {
-                    MultiPartInputStreamParser parser =
-                            new MultiPartInputStreamParser(
+                    MultiPartFormInputStream parser =
+                            new MultiPartFormInputStream(
                                     is, contentType, null, null);
 
                     JSONObject data = new JSONObject();
@@ -677,10 +676,6 @@ public class HttpBinHandler extends AbstractHandler {
             baseRequest.setHandled(true);
         } catch (JSONException e) {
             logger.trace("JSONException", e);
-            servletResponse.setStatus(500);
-            baseRequest.setHandled(true);
-        } catch (ServletException e) {
-            logger.trace("ServletException", e);
             servletResponse.setStatus(500);
             baseRequest.setHandled(true);
         }

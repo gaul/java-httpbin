@@ -23,6 +23,7 @@ import java.net.URI;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.util.MultiPartContentProvider;
 import org.eclipse.jetty.client.util.StringContentProvider;
 import org.json.JSONObject;
 import org.junit.After;
@@ -77,8 +78,6 @@ public final class HttpBinTest {
         assertThat(object.getString("data")).isEqualTo(input);
     }
 
-    // TODO: requires Jetty 9.3 which requires Java 8
-/*
     @Test
     public void testPostDataMultipartContent() throws Exception {
         JSONObject input = new JSONObject();
@@ -96,9 +95,8 @@ public final class HttpBinTest {
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
-        assertThat(object.getJSONObject("data").similar(input)).isTrue();
+        assertThat(object.getJSONObject("form").similar(input)).isTrue();
     }
-*/
 
     @Test
     public void testPutData() throws Exception {
