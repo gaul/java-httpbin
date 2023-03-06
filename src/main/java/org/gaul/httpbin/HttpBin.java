@@ -17,13 +17,17 @@
 
 package org.gaul.httpbin;
 
-import static java.util.Objects.requireNonNull;
+import java.util.ArrayList;
+import java.util.List;
 
-import java.net.URI;
-
+import org.eclipse.jetty.server.Connector;
+import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
+import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.server.SslConnectionFactory;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 /**
  * Reimplementation of HttpBin https://httpbin.org/ suitable for offline unit
@@ -31,22 +35,54 @@ import org.eclipse.jetty.server.ServerConnector;
  */
 public final class HttpBin {
     private final Server server;
+    private final int mHTTPPort;
+    private final int mHTTPsPort;
 
-    public HttpBin(URI endpoint) throws Exception {
-        this(endpoint, new HttpBinHandler());
+    public HttpBin(String ip, int httpPort, int httpsPort, String keystore) throws Exception {
+        this(ip, httpPort, httpsPort, keystore, new HttpBinHandler());
     }
 
-    public HttpBin(URI endpoint, HttpBinHandler handler) throws Exception {
-        requireNonNull(endpoint);
+    public HttpBin(String ip, int httpPort, int httpsPort, String keystore, HttpBinHandler handler) throws Exception {
 
         server = new Server();
         HttpConnectionFactory httpConnectionFactory =
                 new HttpConnectionFactory();
-        ServerConnector connector = new ServerConnector(server,
+
+        mHTTPPort = httpPort;
+        mHTTPsPort = httpsPort;
+        List<Connector> connectors = new ArrayList<Connector>();
+        if (httpPort != 0) {
+            ServerConnector connector = new ServerConnector(server,
                 httpConnectionFactory);
-        connector.setHost(endpoint.getHost());
-        connector.setPort(endpoint.getPort());
-        server.addConnector(connector);
+            connector.setHost(ip);
+            connector.setPort(httpPort);
+            connectors.add(connector);
+        }
+
+        if (httpsPort != 0) {
+            HttpConfiguration https = new HttpConfiguration();
+            SecureRequestCustomizer src = new SecureRequestCustomizer();
+            src.setSniHostCheck(false);
+            https.addCustomizer(src);
+            SslContextFactory.Server sslContextFactory = new SslContextFactory.Server();
+            sslContextFactory.setKeyStorePath(keystore);
+            sslContextFactory.setKeyStorePassword("123456");
+            sslContextFactory.setKeyManagerPassword("123456");
+
+            ServerConnector sslConnector = new ServerConnector(server,
+                new SslConnectionFactory(sslContextFactory, "http/1.1"),
+                new HttpConnectionFactory(https));
+            sslConnector.setHost(ip);
+            sslConnector.setPort(httpsPort);
+            connectors.add(sslConnector);
+        }
+
+        if (connectors.size() == 0) {
+            throw new Exception("At least one of ports must be set");
+        }
+        Connector[] customs = new Connector[connectors.size()];
+        connectors.toArray(customs);
+        server.setConnectors(customs);
         server.setHandler(handler);
     }
 
@@ -58,7 +94,11 @@ public final class HttpBin {
         server.stop();
     }
 
-    public int getPort() {
-        return ((ServerConnector) server.getConnectors()[0]).getLocalPort();
+    public int getHTTPPort() {
+        return mHTTPPort;
+    }
+
+    public int getHTTPsPort() {
+        return mHTTPsPort;
     }
 }

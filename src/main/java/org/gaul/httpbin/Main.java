@@ -17,7 +17,13 @@
 
 package org.gaul.httpbin;
 
-import java.net.URI;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 
 public final class Main {
     private Main() {
@@ -25,10 +31,40 @@ public final class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        // TODO: configurable
-        URI httpBinEndpoint = URI.create("http://127.0.0.1:8080");
+        Options options = new Options();
+        options.addOption(Option.builder("p")
+                                 .longOpt("port")
+                                 .hasArg()
+                                 .desc("http port")
+                                 .build());
+        options.addOption(Option.builder("s")
+                                 .longOpt("tls-port")
+                                 .hasArg()
+                                 .desc("https port")
+                                 .build());
+        options.addOption(Option.builder("ip")
+                                 .hasArg()
+                                 .desc("ip to listen on")
+                                 .build());
+        options.addOption(Option.builder("keystore")
+                                 .hasArg()
+                                 .required()
+                                 .build());
+        CommandLineParser parser = new DefaultParser();
+        try {
+            CommandLine cmd = parser.parse(options, args);
+            int httpPort = Integer.parseInt(cmd.getOptionValue("port", "8080"));
+            int httpsPort = Integer.parseInt(cmd.getOptionValue("tls-port", "8443"));
+            String ip = cmd.getOptionValue("ip", "0.0.0.0");
+            String keystore = cmd.getOptionValue("keystore");
 
-        HttpBin httpBin = new HttpBin(httpBinEndpoint);
-        httpBin.start();
+            HttpBin httpBin = new HttpBin(ip, httpPort, httpsPort, keystore);
+            httpBin.start();
+        } catch (ParseException e) {
+            System.err.println("Error parsing command line options: " + e.getMessage());
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp("myapp", options);
+            System.exit(1);
+        }
     }
 }
