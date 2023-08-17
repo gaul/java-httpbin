@@ -61,7 +61,7 @@ First add dependency to `pom.xml`:
 <dependency>
   <groupId>org.gaul</groupId>
   <artifactId>httpbin</artifactId>
-  <version>1.3.0</version>
+  <version>1.4.0</version>
 </dependency>
 ```
 
