@@ -188,6 +188,7 @@
         <artifactId>really-executable-jar-maven-plugin</artifactId>
         <version>1.4.0</version>
         <configuration>
+          <inputFile>target/httpbin-${version}-jar-with-dependencies.jar</inputFile>
           <programFile>httpbin</programFile>
         </configuration>
         <executions>
