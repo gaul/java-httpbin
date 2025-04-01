@@ -263,7 +263,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>11</java.version>
-    <jetty.version>11.0.24</jetty.version>
+    <jetty.version>11.0.25</jetty.version>
   </properties>
 
   <dependencies>
