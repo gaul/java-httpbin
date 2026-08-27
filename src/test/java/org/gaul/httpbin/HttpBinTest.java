@@ -43,13 +43,13 @@ public final class HttpBinTest {
 
     @Before
     public void setUp() throws Exception {
-        httpBin = new HttpBin(httpBinEndpoint);
+        httpBin = new HttpBin("127.0.0.1", 8001, 0, "");
         httpBin.start();
 
         // reset endpoint to handle zero port
         httpBinEndpoint = new URI(httpBinEndpoint.getScheme(),
                 httpBinEndpoint.getUserInfo(), httpBinEndpoint.getHost(),
-                httpBin.getPort(), httpBinEndpoint.getPath(),
+                httpBin.getHTTPPort(), httpBinEndpoint.getPath(),
                 httpBinEndpoint.getQuery(), httpBinEndpoint.getFragment());
         logger.debug("HttpBin listening on {}", httpBinEndpoint);
 
