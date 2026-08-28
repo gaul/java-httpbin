@@ -18,6 +18,18 @@
       <unpack>true</unpack>
       <scope>runtime</scope>
     </dependencySet>
+    <dependencySet>
+      <!-- logback is provided rather than compile scope so that it is not
+           imposed on consumers of the library, but the executable jar still
+           needs an SLF4J binding of its own. -->
+      <outputDirectory>/</outputDirectory>
+      <useProjectArtifact>false</useProjectArtifact>
+      <unpack>true</unpack>
+      <scope>provided</scope>
+      <includes>
+        <include>ch.qos.logback:*</include>
+      </includes>
+    </dependencySet>
   </dependencySets>
   <fileSets>
     <fileSet>

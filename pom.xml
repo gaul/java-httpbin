@@ -325,9 +325,12 @@
 
   <dependencies>
     <dependency>
+      <!-- Provided so that a consumer of the library chooses its own SLF4J
+           binding; the assembly puts this back into the executable jar. -->
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
       <version>1.6.1</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
