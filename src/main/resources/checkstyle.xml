@@ -56,7 +56,6 @@
     </module>
     <module name="InnerAssignment"/>
     <module name="InterfaceIsType"/>
-    <module name="JavadocStyle"/>
     <module name="LeftCurly"/>
     <module name="LocalFinalVariableName"/>
     <module name="LocalVariableName"/>
@@ -97,6 +96,7 @@
     <module name="SimplifyBooleanReturn"/>
     <module name="StaticVariableName"/>
     <module name="StringLiteralEquality"/>
+    <module name="SummaryJavadoc"/>
     <module name="SuppressWarnings"/>
     <module name="TodoComment">
       <property name="severity" value="ignore"/>
