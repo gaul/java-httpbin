@@ -1,6 +1,6 @@
 # Java httpbin
 
-[![Build Status](https://travis-ci.org/gaul/java-httpbin.svg?branch=master)](https://travis-ci.org/gaul/java-httpbin)
+[![Build Status](https://github.com/gaul/java-httpbin/actions/workflows/ci.yml/badge.svg)](https://github.com/gaul/java-httpbin/actions/workflows/ci.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/org.gaul/httpbin.svg)](https://search.maven.org/#search%7Cga%7C1%7Ca%3A%22httpbin%22)
 
 A Java-based HTTP server that lets you locally test your HTTP client, retry

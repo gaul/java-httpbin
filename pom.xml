@@ -214,7 +214,7 @@
         <artifactId>really-executable-jar-maven-plugin</artifactId>
         <version>2.1.1</version>
         <configuration>
-          <inputFile>target/httpbin-${version}-jar-with-dependencies.jar</inputFile>
+          <inputFile>target/httpbin-${project.version}-jar-with-dependencies.jar</inputFile>
           <programFile>httpbin</programFile>
         </configuration>
         <executions>
