@@ -133,6 +133,14 @@ Notes:
 - When passing your own handler to `new HttpBin(endpoint, handler)`, the
   handler's prefix must match the endpoint's, otherwise the constructor throws.
 
+## Compatibility
+
+[psf/httpbin](https://github.com/psf/httpbin)'s own test suite runs against this
+server in CI, which measures the subset above rather than merely describing it.
+Each test that does not pass names the endpoint that is missing or the behavior
+that differs.  See [src/test/python](src/test/python) to run the suite, or to
+work through one of those differences.
+
 ## References
 
 * [httpbin](https://httpbin.org/) - original Python implementation

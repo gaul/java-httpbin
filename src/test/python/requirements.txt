@@ -1,0 +1,5 @@
+# The suite itself lives in the upstream submodule; install it alongside these
+# with `pip install ./upstream -r requirements.txt`.  That also supplies
+# werkzeug, which conftest.py borrows to model response headers.
+pytest==9.1.1
+requests==2.34.2

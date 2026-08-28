@@ -27,3 +27,31 @@ jobs:
         cache: 'maven'
     - name: Build with Maven
       run: mvn --no-transfer-progress -B clean verify
+
+  upstream-suite:
+    name: Upstream httpbin suite
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        submodules: true
+    - name: Set up JDK
+      uses: actions/setup-java@v6
+      with:
+        distribution: 'zulu'
+        java-version: '21'
+        cache: 'maven'
+    - name: Build the executable jar
+      run: mvn --no-transfer-progress -B -DskipTests package
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.14'
+        cache: 'pip'
+        cache-dependency-path: src/test/python/requirements.txt
+    - name: Install the upstream suite
+      working-directory: src/test/python
+      run: pip install ./upstream -r requirements.txt
+    - name: Run the upstream suite
+      working-directory: src/test/python
+      run: pytest
