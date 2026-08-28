@@ -142,8 +142,8 @@
           </execution>
         </executions>
         <configuration>
-          <configLocation>src/main/resources/checkstyle.xml</configLocation>
-          <headerLocation>src/main/resources/copyright_header.txt</headerLocation>
+          <configLocation>src/main/config/checkstyle.xml</configLocation>
+          <headerLocation>src/main/config/copyright_header.txt</headerLocation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <violationSeverity>warning</violationSeverity>
         </configuration>
