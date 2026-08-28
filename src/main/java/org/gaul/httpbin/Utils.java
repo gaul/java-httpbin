@@ -22,7 +22,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.TimeUnit;
 
-import jakarta.servlet.http.HttpServletRequest;
+import org.eclipse.jetty.util.Fields;
 
 final class Utils {
     static final OutputStream NULL_OUTPUT_STREAM = new OutputStream() {
@@ -79,18 +79,18 @@ final class Utils {
         }
     }
 
-    static int getIntParameter(HttpServletRequest request, String name,
+    static int getIntParameter(Fields params, String name,
             int defaultValue) {
-        String value = request.getParameter(name);
+        String value = params.getValue(name);
         if (value == null) {
             return defaultValue;
         }
         return Integer.parseInt(value);
     }
 
-    static double getDoubleParameter(HttpServletRequest request, String name,
+    static double getDoubleParameter(Fields params, String name,
             double defaultValue) {
-        String value = request.getParameter(name);
+        String value = params.getValue(name);
         if (value == null) {
             return defaultValue;
         }

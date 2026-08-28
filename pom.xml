@@ -262,8 +262,8 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <java.version>11</java.version>
-    <jetty.version>11.0.26</jetty.version>
+    <java.version>17</java.version>
+    <jetty.version>12.1.12</jetty.version>
   </properties>
 
   <dependencies>
@@ -296,7 +296,7 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-servlet</artifactId>
+      <artifactId>jetty-server</artifactId>
       <version>${jetty.version}</version>
     </dependency>
     <dependency>

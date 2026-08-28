@@ -21,10 +21,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
 
+import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.util.MultiPartContentProvider;
-import org.eclipse.jetty.client.util.StringContentProvider;
+import org.eclipse.jetty.client.MultiPartRequestContent;
+import org.eclipse.jetty.client.StringRequestContent;
+import org.eclipse.jetty.http.MultiPart;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -71,7 +72,7 @@ public final class HttpBinTest {
     public void testPostData() throws Exception {
         String input = "{\"foo\": 42}";
         ContentResponse response = client.POST(httpBinEndpoint + "/post")
-                .content(new StringContentProvider(input), "application/json")
+                .body(new StringRequestContent("application/json", input))
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
@@ -83,15 +84,17 @@ public final class HttpBinTest {
         JSONObject input = new JSONObject();
         input.put("field1", "foo");
         input.put("field2", "bar");
-        MultiPartContentProvider multiPart = new MultiPartContentProvider();
-        multiPart.addFieldPart("field1", new StringContentProvider("foo"),
-                null);
-        multiPart.addFieldPart("field2", new StringContentProvider("bar"),
-                null);
+        MultiPartRequestContent multiPart = new MultiPartRequestContent();
+        multiPart.addPart(new MultiPart.ContentSourcePart("field1",
+                /*fileName=*/ null, /*fields=*/ null,
+                new StringRequestContent("foo")));
+        multiPart.addPart(new MultiPart.ContentSourcePart("field2",
+                /*fileName=*/ null, /*fields=*/ null,
+                new StringRequestContent("bar")));
         multiPart.close();
 
         ContentResponse response = client.POST(httpBinEndpoint + "/post")
-                .content(multiPart)
+                .body(multiPart)
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
@@ -103,7 +106,7 @@ public final class HttpBinTest {
         String input = "{\"foo\": 42}";
         ContentResponse response = client.newRequest(httpBinEndpoint + "/put")
                 .method("PUT")
-                .content(new StringContentProvider(input), "application/json")
+                .body(new StringRequestContent("application/json", input))
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
