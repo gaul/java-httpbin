@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/master/spotbugs/etc/findbugsfilter.xsd">
+  <Match>
+    <!-- /bytes and /stream-bytes seed a Random so that a given seed always
+         yields the same body, so drawing a single value from it is the
+         intent rather than a mistake. -->
+    <Class name="org.gaul.httpbin.HttpBinHandler"/>
+    <Bug pattern="DMI_RANDOM_USED_ONLY_ONCE"/>
+  </Match>
+</FindBugsFilter>

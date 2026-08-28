@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
@@ -336,7 +337,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 int chunkSize = Utils.getIntParameter(params, "chunkSize",
                         200);
                 byte[] buf = new byte[chunkSize];
-                Random random = seed == -1 ? new Random() : new Random(seed);
+                Random random = seed == -1 ?
+                        ThreadLocalRandom.current() : new Random(seed);
 
                 response.setStatus(HttpStatus.OK_200);
 
@@ -520,7 +522,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 long length = Long.parseLong(uri.substring(
                         "/bytes/".length()));
                 int seed = Utils.getIntParameter(params, "seed", -1);
-                Random random = seed != -1 ?  new Random(seed) : new Random();
+                Random random = seed != -1 ?
+                        new Random(seed) : ThreadLocalRandom.current();
 
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 response.setStatus(HttpStatus.OK_200);
