@@ -296,8 +296,10 @@
             </goals>
             <configuration>
               <rules>
+                <!-- The Njord extension fails to provision on older
+                     Maven; 3.8.9 dies with a Guice ProvisionException. -->
                 <requireMavenVersion>
-                  <version>3.0.5</version>
+                  <version>3.9</version>
                 </requireMavenVersion>
                 <!-- Checkstyle and Error Prone both ship Java 21 class
                      files, so a full build needs a JDK that new.  Compiling
