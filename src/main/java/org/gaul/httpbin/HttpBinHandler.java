@@ -65,6 +65,61 @@ public class HttpBinHandler extends Handler.Abstract {
                     .maxMemoryPartSize(-1)
                     .build();
 
+    private final String prefix;
+    private final String cookiePath;
+
+    public HttpBinHandler() {
+        this("");
+    }
+
+    /**
+     * Serves the httpbin endpoints beneath a path instead of at the server
+     * root, so that /some/other/path/headers behaves like /headers does.
+     *
+     * @param prefix path to serve beneath, empty to serve at the root
+     */
+    public HttpBinHandler(String prefix) {
+        this.prefix = normalizePrefix(prefix);
+        // A cookie scoped to / would leak to anything else sharing the
+        // origin, but RFC 6265 path matching makes Path=/some/other/path
+        // cover /some/other/path/cookies as well as the prefix itself.
+        this.cookiePath = this.prefix.isEmpty() ? "/" : this.prefix;
+    }
+
+    static String normalizePrefix(String prefix) {
+        if (prefix == null || prefix.isEmpty() || prefix.equals("/")) {
+            return "";
+        }
+        if (!prefix.startsWith("/")) {
+            throw new IllegalArgumentException(
+                    "prefix must start with /: " + prefix);
+        }
+        String normalized = prefix.endsWith("/") ?
+                prefix.substring(0, prefix.length() - 1) : prefix;
+        // Requests are matched against the raw path, so a prefix that Jetty
+        // would only produce after decoding could never match.  Rejecting it
+        // beats serving nothing but 501.
+        for (String segment : normalized.substring(1).split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") ||
+                    segment.equals("..")) {
+                throw new IllegalArgumentException(
+                        "prefix must not contain empty or dot segments: " +
+                                prefix);
+            }
+        }
+        for (String reserved : new String[] {"%", ";", "?", "#"}) {
+            if (normalized.contains(reserved)) {
+                throw new IllegalArgumentException(
+                        "prefix must not contain " + reserved + ": " + prefix);
+            }
+        }
+        return normalized;
+    }
+
+    public String getPrefix() {
+        return prefix;
+    }
+
     @Override
     public boolean handle(Request request, Response response,
             Callback callback) throws IOException {
@@ -86,7 +141,11 @@ public class HttpBinHandler extends Handler.Abstract {
     private void handleHelper(Request request, Response response,
             InputStream is, OutputStream os) throws IOException {
         String method = request.getMethod();
-        String uri = request.getHttpURI().getPath();
+        String uri = stripPrefix(request.getHttpURI().getPath());
+        if (uri == null) {
+            response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+            return;
+        }
         Fields params = Request.extractQueryParameters(request);
         try {
             if (uri.equals("/")) {
@@ -108,7 +167,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 response.setStatus(status);
                 if (status >= 300 && status < 400) {
                     response.getHeaders().put(HttpHeader.LOCATION,
-                            "/redirect/1");
+                            prefix + "/redirect/1");
                 }
                 return;
             } else if (method.equals("GET") && uri.equals("/headers")) {
@@ -409,16 +468,16 @@ public class HttpBinHandler extends Handler.Abstract {
                 if (count > 0) {
                     StringBuilder path = new StringBuilder();
                     if ("true".equals(params.getValue("absolute"))) {
-                        path.append(getRequestURL(request));
-                        path.setLength(path.length() - uri.length());
+                        // Already beneath the prefix, so do not add it again.
+                        path.append(originAndPrefix(request));
                         path.append("/absolute-redirect/");
                     } else {
-                        path.append("/relative-redirect/");
+                        path.append(prefix).append("/relative-redirect/");
                     }
                     path.append(count);
                     redirectTo(response, path.toString());
                 } else {
-                    redirectTo(response, "/get");
+                    redirectTo(response, prefix + "/get");
                 }
 
                 return;
@@ -427,9 +486,9 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 int count = Integer.parseInt(uri.substring(
                         "/absolute-redirect/".length())) - 1;
+                // Already beneath the prefix, so do not add it again.
                 StringBuilder path = new StringBuilder(
-                        getRequestURL(request));
-                path.setLength(path.length() - uri.length());
+                        originAndPrefix(request));
                 if (count > 0) {
                     path.append("/absolute-redirect/")
                             .append(count);
@@ -469,11 +528,13 @@ public class HttpBinHandler extends Handler.Abstract {
                 for (String name : params.getNames()) {
                     for (String value : params.getValues(name)) {
                         response.getHeaders().add(HttpHeader.SET_COOKIE,
-                                "%s=%s; Path=/".formatted(name, value));
+                                "%s=%s; Path=%s".formatted(name, value,
+                                        cookiePath));
                     }
                 }
 
-                response.getHeaders().put(HttpHeader.LOCATION, "/cookies");
+                response.getHeaders().put(HttpHeader.LOCATION,
+                        prefix + "/cookies");
                 response.setStatus(HttpStatus.MOVED_TEMPORARILY_302);
                 return;
             } else if (uri.startsWith("/cookies/delete")) {
@@ -481,10 +542,11 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 for (String name : params.getNames()) {
                     response.getHeaders().add(HttpHeader.SET_COOKIE,
-                            "%s=; Path=/".formatted(name));
+                            "%s=; Path=%s".formatted(name, cookiePath));
                 }
 
-                response.getHeaders().put(HttpHeader.LOCATION, "/cookies");
+                response.getHeaders().put(HttpHeader.LOCATION,
+                        prefix + "/cookies");
                 response.setStatus(HttpStatus.MOVED_TEMPORARILY_302);
                 return;
             } else if (uri.startsWith("/basic-auth/")) {
@@ -619,8 +681,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 copyResource(response, os, "/text.xml");
                 return;
             } else if (method.equals("GET") && uri.equals("/robots.txt")) {
-                byte[] output = "User-agent: *\nDisallow: /deny\n".getBytes(
-                        StandardCharsets.UTF_8);
+                byte[] output = ("User-agent: *\nDisallow: " + prefix +
+                        "/deny\n").getBytes(StandardCharsets.UTF_8);
 
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().put(HttpHeader.CONTENT_TYPE,
@@ -723,8 +785,37 @@ public class HttpBinHandler extends Handler.Abstract {
         return request.getHttpURI().asString();
     }
 
-    private static String getRequestURL(Request request) {
-        return HttpURI.build(request.getHttpURI()).query(null).asString();
+    /**
+     * Removes the configured prefix from a raw request path.
+     *
+     * <p>This mirrors Jetty's Context.getPathInContext but works on the raw
+     * path, which is what the routes above match.  Requests carrying path
+     * parameters or dot segments therefore do not match the prefix and fall
+     * through to 501, which fails closed: raw matching is strictly narrower
+     * than canonical matching, so nothing reaches a route it should not.
+     *
+     * @param path raw path from the request
+     * @return the path beneath the prefix, or null when it lies outside
+     */
+    private String stripPrefix(String path) {
+        if (prefix.isEmpty()) {
+            return path;
+        }
+        if (!path.startsWith(prefix)) {
+            return null;
+        }
+        if (path.length() == prefix.length()) {
+            return "/";
+        }
+        if (path.charAt(prefix.length()) != '/') {
+            return null;
+        }
+        return path.substring(prefix.length());
+    }
+
+    private String originAndPrefix(Request request) {
+        return HttpURI.build(request.getHttpURI()).path("").query(null)
+                .asString() + prefix;
     }
 
     private static void handleBasicAuth(Request request, Response response,

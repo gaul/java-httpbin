@@ -10,4 +10,12 @@
     <Class name="org.gaul.httpbin.HttpBinHandler"/>
     <Bug pattern="DMI_RANDOM_USED_ONLY_ONCE"/>
   </Match>
+  <Match>
+    <!-- The constructor rejects an invalid prefix, which is worth more than
+         guarding a subclass against a finalizer attack: HttpBinHandler holds
+         no sensitive state, and it cannot be made final because callers are
+         expected to extend it. -->
+    <Class name="org.gaul.httpbin.HttpBinHandler"/>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
 </FindBugsFilter>

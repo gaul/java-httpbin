@@ -25,8 +25,8 @@ public final class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        // TODO: configurable
-        URI httpBinEndpoint = URI.create("http://127.0.0.1:8080");
+        URI httpBinEndpoint = URI.create(args.length > 0 ? args[0] :
+                "http://127.0.0.1:8080");
 
         HttpBin httpBin = new HttpBin(httpBinEndpoint);
         httpBin.start();

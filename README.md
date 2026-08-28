@@ -95,6 +95,44 @@ public void test() throws Exception {
 }
 ```
 
+## Path prefix
+
+By default the endpoints live at the server root.  Give the endpoint URI a path
+to serve them beneath it instead, so that a test can share an origin with
+another service:
+
+```java
+URI httpBinEndpoint = URI.create("http://127.0.0.1:0/some/other/path");
+HttpBin httpBin = new HttpBin(httpBinEndpoint);
+httpBin.start();
+
+// GET /some/other/path/headers returns the headers
+// GET /headers                 returns 501
+```
+
+The executable jar accepts the same URI:
+
+```
+httpbin http://127.0.0.1:8080/some/other/path
+```
+
+Notes:
+
+- Requests outside the prefix return 501, as unknown paths already do.
+- The prefix must be a plain path: no percent-encoding, `;`, `?`, `#`, or empty
+  or dot segments.  Requests are matched against the raw path, so a prefix
+  needing decoding could never match, and an invalid one is rejected outright
+  rather than silently serving nothing.
+- For the same reason, a prefixed request carrying path parameters
+  (`/some/other/path/get;jsessionid=1`) or dot segments does not match and
+  returns 501.
+- `Location` headers this server generates, and the `Path` of cookies it sets,
+  carry the prefix.  `/redirect-to?url=` and `/response-headers` echo values the
+  caller supplied and are left verbatim, so a caller wanting those prefixed
+  must say so.
+- When passing your own handler to `new HttpBin(endpoint, handler)`, the
+  handler's prefix must match the endpoint's, otherwise the constructor throws.
+
 ## References
 
 * [httpbin](https://httpbin.org/) - original Python implementation

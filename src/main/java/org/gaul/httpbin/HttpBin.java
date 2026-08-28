@@ -31,13 +31,22 @@ import org.eclipse.jetty.server.ServerConnector;
  */
 public final class HttpBin {
     private final Server server;
+    private final String prefix;
 
     public HttpBin(URI endpoint) throws Exception {
-        this(endpoint, new HttpBinHandler());
+        this(endpoint, new HttpBinHandler(prefixOf(endpoint)));
     }
 
     public HttpBin(URI endpoint, HttpBinHandler handler) throws Exception {
         requireNonNull(endpoint);
+        requireNonNull(handler);
+
+        prefix = prefixOf(endpoint);
+        if (!prefix.equals(handler.getPrefix())) {
+            throw new IllegalArgumentException(
+                    "endpoint path \"" + prefix + "\" does not match " +
+                            "handler prefix \"" + handler.getPrefix() + "\"");
+        }
 
         server = new Server();
         HttpConnectionFactory httpConnectionFactory =
@@ -60,5 +69,16 @@ public final class HttpBin {
 
     public int getPort() {
         return ((ServerConnector) server.getConnectors()[0]).getLocalPort();
+    }
+
+    public String getPrefix() {
+        return prefix;
+    }
+
+    // getRawPath because Jetty matches the raw request path, while getPath
+    // would percent-decode and could then never match.
+    private static String prefixOf(URI endpoint) {
+        return HttpBinHandler.normalizePrefix(
+                requireNonNull(endpoint).getRawPath());
     }
 }
