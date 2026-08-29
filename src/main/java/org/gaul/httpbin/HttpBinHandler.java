@@ -59,6 +59,7 @@ public class HttpBinHandler extends Handler.Abstract {
     private static final Logger logger = LoggerFactory.getLogger(
             HttpBinHandler.class);
     private static final int MAX_DELAY_MS = 10 * 1000;
+    private static final String OCTET_STREAM = "application/octet-stream";
     // What OPTIONS reports it answers.  Upstream names one method per route
     // because Flask knows its routes; this handler dispatches on a chain of
     // comparisons, so it reports the same set everywhere.
@@ -390,6 +391,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 int code = Utils.getIntParameter(params, "code", 200);
                 int delay = Utils.getIntParameter(params, "delay", 0);
 
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        OCTET_STREAM);
                 response.setStatus(code);
                 Utils.sleepUninterruptibly(delay, TimeUnit.SECONDS);
 
@@ -442,6 +445,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 Random random = seed == -1 ?
                         ThreadLocalRandom.current() : new Random(seed);
 
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        OCTET_STREAM);
                 response.setStatus(HttpStatus.OK_200);
 
                 for (long i = 0; i < numBytes; i += chunkSize) {
@@ -711,6 +716,8 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 response.setStatus(HttpStatus.OK_200);
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        OCTET_STREAM);
                 response.getHeaders().put(HttpHeader.CONTENT_LENGTH, length);
                 byte[] buffer = new byte[4096];
                 for (long i = 0; i < length;) {
@@ -724,6 +731,10 @@ public class HttpBinHandler extends Handler.Abstract {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 byte[] body = Base64.getDecoder().decode(
                         uri.substring("/base64/".length()));
+                // Upstream returns the decoded bytes as a plain string,
+                // which Flask types as HTML whatever they hold.
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
                 response.setStatus(HttpStatus.OK_200);
                 os.write(body);
                 os.flush();
@@ -765,6 +776,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 response.getHeaders().add(HttpHeader.ETAG, "range" + size);
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        OCTET_STREAM);
                 response.getHeaders().add(HttpHeader.CONTENT_LENGTH,
                         String.valueOf(end - start + 1));
                 response.getHeaders().add(HttpHeader.CONTENT_RANGE,

@@ -126,6 +126,25 @@ public final class HttpBinTest {
         assertThat(json.getJSONObject("headers")).isNotNull();
     }
 
+    /** Bytes a client cannot classify are bytes it cannot use. */
+    @Test
+    public void testContentTypes() throws Exception {
+        assertContentType("/bytes/16", "application/octet-stream");
+        assertContentType("/stream-bytes/16", "application/octet-stream");
+        assertContentType("/range/26", "application/octet-stream");
+        assertContentType("/drip?numbytes=4&duration=0",
+                "application/octet-stream");
+        assertContentType("/base64/aGVsbG8=", "text/html;charset=utf-8");
+    }
+
+    private void assertContentType(String path, String contentType)
+            throws Exception {
+        ContentResponse response = client.GET(httpBinEndpoint + path);
+        assertThat(response.getStatus()).as(path).isEqualTo(200);
+        assertThat(response.getHeaders().get(HttpHeader.CONTENT_TYPE))
+                .as(path).isEqualTo(contentType);
+    }
+
     /** A HEAD answers what a GET would, with the length but no body. */
     @Test
     public void testHead() throws Exception {
