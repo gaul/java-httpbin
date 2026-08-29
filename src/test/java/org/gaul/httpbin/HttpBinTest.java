@@ -296,6 +296,50 @@ public final class HttpBinTest {
                 .send();
     }
 
+    /** A part naming a file is reported apart from the rest. */
+    @Test
+    public void testPostFileIsReportedSeparately() throws Exception {
+        MultiPartRequestContent multiPart = new MultiPartRequestContent();
+        multiPart.addPart(new MultiPart.ContentSourcePart("field",
+                /*fileName=*/ null, /*fields=*/ null,
+                new StringRequestContent("value")));
+        multiPart.addPart(new MultiPart.ContentSourcePart("upload",
+                "name.txt", /*fields=*/ null,
+                new StringRequestContent("file body")));
+        multiPart.close();
+
+        ContentResponse response = client.POST(httpBinEndpoint + "/post")
+                .body(multiPart)
+                .send();
+        assertThat(response.getStatus()).as("status").isEqualTo(200);
+        JSONObject object = new JSONObject(response.getContentAsString());
+        assertThat(object.getJSONObject("form").getString("field"))
+                .isEqualTo("value");
+        assertThat(object.getJSONObject("form").has("upload")).isFalse();
+        assertThat(object.getJSONObject("files").getString("upload"))
+                .isEqualTo("file body");
+        assertThat(object.getString("data")).isEmpty();
+        assertThat(object.isNull("json")).isTrue();
+    }
+
+    /** Each endpoint reports the keys upstream chose for it, and no more. */
+    @Test
+    public void testEchoedKeys() throws Exception {
+        assertKeys("/get", "url", "args", "headers", "origin");
+        assertKeys("/anything", "url", "args", "headers", "origin", "method",
+                "form", "data", "files", "json");
+        assertKeys("/gzip", "origin", "headers", "method", "gzipped");
+    }
+
+    private void assertKeys(String path, String... keys) throws Exception {
+        // The client decodes /gzip for us, so every body arrives as JSON.
+        ContentResponse response = client.GET(httpBinEndpoint + path);
+        assertThat(response.getStatus()).as(path).isEqualTo(200);
+        JSONObject object = new JSONObject(response.getContentAsString());
+        assertThat(object.keySet()).as(path)
+                .containsExactlyInAnyOrder(keys);
+    }
+
     @Test
     public void testPutData() throws Exception {
         String input = "{\"foo\": 42}";

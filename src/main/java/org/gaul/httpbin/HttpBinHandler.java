@@ -60,6 +60,9 @@ public class HttpBinHandler extends Handler.Abstract {
             HttpBinHandler.class);
     private static final int MAX_DELAY_MS = 10 * 1000;
     private static final String OCTET_STREAM = "application/octet-stream";
+    // The keys that only a request body can answer.
+    private static final List<String> BODY_KEYS =
+            List.of("form", "files", "data", "json");
     // What OPTIONS reports it answers.  Upstream names one method per route
     // because Flask knows its routes; this handler dispatches on a chain of
     // comparisons, so it reports the same set everywhere.
@@ -220,13 +223,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 respondJSON(response, os, json);
                 return;
             } else if (getOrHead && uri.equals("/gzip")) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                JSONObject json = new JSONObject();
-                json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("url", getFullURL(request));
+                JSONObject json = describeRequest(request, is, params,
+                        "origin", "headers", "method");
                 json.put("gzipped", true);
 
                 byte[] uncompressed = jsonBody(json);
@@ -247,13 +245,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.flush();
                 return;
             } else if (getOrHead && uri.equals("/deflate")) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                JSONObject json = new JSONObject();
-                json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("url", getFullURL(request));
+                JSONObject json = describeRequest(request, is, params,
+                        "origin", "headers", "method");
                 json.put("deflated", true);
 
                 byte[] uncompressed = jsonBody(json);
@@ -277,14 +270,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.flush();
                 return;
             } else if (getOrHead && uri.equals("/brotli")) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                // Upstream reports the method here and leaves out the args
-                // and url that /gzip and /deflate above have long carried.
-                JSONObject json = new JSONObject();
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("method", method);
+                JSONObject json = describeRequest(request, is, params,
+                        "origin", "headers", "method");
                 json.put("brotli", true);
 
                 byte[] compressed = Brotli.encode(jsonBody(json));
@@ -308,13 +295,8 @@ public class HttpBinHandler extends Handler.Abstract {
                     return;
                 }
 
-                JSONObject json = new JSONObject();
-                json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("url", getFullURL(request));
-
-                respondJSON(response, os, json);
+                respondJSON(response, os, describeRequest(request, is,
+                        params, "url", "args", "headers", "origin"));
                 return;
             } else if (getOrHead && uri.startsWith("/cache/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -322,19 +304,14 @@ public class HttpBinHandler extends Handler.Abstract {
                 int seconds = Integer.parseInt(uri.substring(
                         "/cache/".length()));
 
-                JSONObject json = new JSONObject();
-                json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("url", getFullURL(request));
+                JSONObject json = describeRequest(request, is, params,
+                        "url", "args", "headers", "origin");
 
                 response.getHeaders().put(HttpHeader.CACHE_CONTROL,
                         "public, max-age=" + seconds);
                 respondJSON(response, os, json);
                 return;
             } else if (getOrHead && uri.startsWith("/delay/")) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
                 int delayMs = (int) (1000 * Double.parseDouble(uri.substring(
                         "/delay/".length())));
                 try {
@@ -343,13 +320,9 @@ public class HttpBinHandler extends Handler.Abstract {
                     // ignore
                 }
 
-                JSONObject json = new JSONObject();
-                json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("url", getFullURL(request));
-
-                respondJSON(response, os, json);
+                respondJSON(response, os, describeRequest(request, is, params,
+                        "url", "args", "form", "data", "origin", "headers",
+                        "files"));
                 return;
             } else if (getOrHead && uri.startsWith("/etag/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -456,59 +429,18 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
+            } else if (getOrHead && uri.equals("/get")) {
+                // Upstream reports no body here, the route taking none.
+                respondJSON(response, os, describeRequest(request, is, params,
+                        "url", "args", "headers", "origin"));
+                return;
             } else if ((method.equals("DELETE") && uri.equals("/delete")) ||
-                    (getOrHead && uri.equals("/get")) ||
                     (method.equals("PATCH") && uri.equals("/patch")) ||
                     (method.equals("POST") && uri.equals("/post")) ||
                     (method.equals("PUT") && uri.equals("/put"))) {
-                JSONObject json = new JSONObject();
-
-                String contentType = request.getHeaders().get(
-                        HttpHeader.CONTENT_TYPE);
-                if (contentType != null && contentType.startsWith(
-                        "multipart/form-data")) {
-                    JSONObject data = new JSONObject();
-                    try (MultiPartFormData.Parts parts =
-                            MultiPartFormData.getParts(request, request,
-                                    contentType, MULTI_PART_CONFIG)) {
-                        for (MultiPart.Part part : parts) {
-                            data.put(part.getName(), part.getContentAsString(
-                                    StandardCharsets.UTF_8));
-                        }
-                    }
-                    json.put("data", "");
-                    json.put("form", data);
-                    json.put("json", JSONObject.NULL);
-                } else {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    Utils.copy(is, baos);
-                    String string = new String(
-                            baos.toByteArray(), StandardCharsets.UTF_8);
-                    if (contentType != null && contentType.startsWith(
-                            "application/x-www-form-urlencoded")) {
-                        // Upstream reports these as form and leaves data
-                        // empty, having consumed the body to parse them.
-                        Fields form = new Fields();
-                        UrlEncoded.decodeUtf8To(string, form);
-                        json.put("data", "");
-                        json.put("form", mapParametersToJSON(form));
-                        json.put("json", JSONObject.NULL);
-                    } else {
-                        json.put("data", string);
-                        try {
-                            json.put("json", new JSONObject(string));
-                        } catch (JSONException e) {
-                            // client can provide non-JSON data
-                        }
-                    }
-                }
-
-                json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("url", getFullURL(request));
-
-                respondJSON(response, os, json);
+                respondJSON(response, os, describeRequest(request, is, params,
+                        "url", "args", "form", "data", "origin", "headers",
+                        "files", "json"));
                 return;
             } else if (uri.equals("/redirect-to")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -689,23 +621,9 @@ public class HttpBinHandler extends Handler.Abstract {
                 respondJSON(response, os, json);
                 return;
             } else if (uri.startsWith("/anything")) {
-                response.setStatus(HttpStatus.OK_200);
-
-                final JSONObject json = new JSONObject();
-
-                // Method
-                json.put("method", method);
-                json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", getOrigin(request));
-                json.put("url", getFullURL(request));
-
-                // Body data
-                final ByteArrayOutputStream data = new ByteArrayOutputStream();
-                Utils.copy(is, data);
-
-                json.put("data", data.toString(StandardCharsets.UTF_8));
-                respondJSON(response, os, json);
+                respondJSON(response, os, describeRequest(request, is, params,
+                        "url", "args", "headers", "origin", "method", "form",
+                        "data", "files", "json"));
                 return;
             } else if (getOrHead && uri.startsWith("/bytes/")) {
                 long length = Long.parseLong(uri.substring(
@@ -937,6 +855,107 @@ public class HttpBinHandler extends Handler.Abstract {
         try (InputStream is = getClass().getResourceAsStream(resource)) {
             Utils.copy(is, os);
         }
+    }
+
+    /** What an endpoint reports about a request body. */
+    private record Body(JSONObject form, JSONObject files, String data,
+            Object json) {
+    }
+
+    /**
+     * Reads a request body the way the endpoints that echo one report it.
+     *
+     * <p>A form arrives parsed and leaves data empty, since parsing it
+     * consumes the body; a part naming a file is reported apart from the
+     * rest.  Anything else is reported as data, and as json when it parses.
+     *
+     * @param request request whose body to read
+     * @param is the body
+     * @return what to report about it
+     * @throws IOException if reading the body fails
+     */
+    private static Body readBody(Request request, InputStream is)
+            throws IOException {
+        String contentType = request.getHeaders().get(
+                HttpHeader.CONTENT_TYPE);
+        if (contentType != null && contentType.startsWith(
+                "multipart/form-data")) {
+            JSONObject form = new JSONObject();
+            JSONObject files = new JSONObject();
+            try (MultiPartFormData.Parts parts = MultiPartFormData.getParts(
+                    request, request, contentType, MULTI_PART_CONFIG)) {
+                for (MultiPart.Part part : parts) {
+                    (part.getFileName() == null ? form : files).put(
+                            part.getName(), part.getContentAsString(
+                                    StandardCharsets.UTF_8));
+                }
+            }
+            return new Body(form, files, "", JSONObject.NULL);
+        }
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Utils.copy(is, baos);
+        String string = new String(baos.toByteArray(),
+                StandardCharsets.UTF_8);
+        if (contentType != null && contentType.startsWith(
+                "application/x-www-form-urlencoded")) {
+            Fields form = new Fields();
+            UrlEncoded.decodeUtf8To(string, form);
+            return new Body(mapParametersToJSON(form), new JSONObject(), "",
+                    JSONObject.NULL);
+        }
+
+        Object json = JSONObject.NULL;
+        try {
+            json = new JSONObject(string);
+        } catch (JSONException e) {
+            // client can provide non-JSON data
+        }
+        return new Body(new JSONObject(), new JSONObject(), string, json);
+    }
+
+    /**
+     * Reports a request, naming the keys upstream's get_dict would.
+     *
+     * <p>Which endpoint reports which keys is upstream's choice rather than
+     * a pattern, so each names its own.
+     *
+     * @param request request to report
+     * @param is the request body, read only when a key needs it
+     * @param params query parameters
+     * @param keys keys to report, in upstream's spelling
+     * @return the report
+     * @throws IOException if reading the body fails
+     */
+    private JSONObject describeRequest(Request request, InputStream is,
+            Fields params, String... keys) throws IOException {
+        Body body = null;
+        for (String key : keys) {
+            if (BODY_KEYS.contains(key)) {
+                body = readBody(request, is);
+                break;
+            }
+        }
+        if (body == null) {
+            Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+        }
+
+        JSONObject json = new JSONObject();
+        for (String key : keys) {
+            json.put(key, switch (key) {
+            case "url" -> getFullURL(request);
+            case "args" -> mapParametersToJSON(params);
+            case "headers" -> mapFieldsToJSON(request.getHeaders());
+            case "origin" -> getOrigin(request);
+            case "method" -> request.getMethod();
+            case "form" -> body.form();
+            case "files" -> body.files();
+            case "data" -> body.data();
+            case "json" -> body.json();
+            default -> throw new IllegalArgumentException(key);
+            });
+        }
+        return json;
     }
 
     private static JSONObject mapFieldsToJSON(HttpFields fields) {
