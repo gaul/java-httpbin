@@ -126,6 +126,24 @@ public final class HttpBinTest {
         assertThat(json.getJSONObject("headers")).isNotNull();
     }
 
+    /** A HEAD answers what a GET would, with the length but no body. */
+    @Test
+    public void testHead() throws Exception {
+        for (String path : new String[] {
+            "/get", "/headers", "/ip", "/html", "/image/png", "/robots.txt",
+        }) {
+            ContentResponse get = client.GET(httpBinEndpoint + path);
+            ContentResponse head = client.newRequest(httpBinEndpoint + path)
+                    .method("HEAD")
+                    .send();
+            assertThat(head.getStatus()).as(path).isEqualTo(get.getStatus());
+            assertThat(head.getContent()).as(path).isEmpty();
+            assertThat(head.getHeaders().get(HttpHeader.CONTENT_LENGTH))
+                    .as(path).isEqualTo(get.getHeaders().get(
+                            HttpHeader.CONTENT_LENGTH));
+        }
+    }
+
     /** Upstream reports the forwarded address whole, chain and all. */
     @Test
     public void testOriginFollowsForwardedFor() throws Exception {
@@ -197,7 +215,7 @@ public final class HttpBinTest {
         assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_HEADERS))
                 .isEqualTo("X-Test-Header");
         assertThat(headers.get(HttpHeader.ALLOW))
-                .isEqualTo("GET, POST, PUT, DELETE, PATCH, OPTIONS");
+                .isEqualTo("GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
     }
 
     /**

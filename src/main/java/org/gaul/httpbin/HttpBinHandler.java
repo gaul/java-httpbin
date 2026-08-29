@@ -59,11 +59,14 @@ public class HttpBinHandler extends Handler.Abstract {
     private static final Logger logger = LoggerFactory.getLogger(
             HttpBinHandler.class);
     private static final int MAX_DELAY_MS = 10 * 1000;
-    // The methods this server answers, which OPTIONS reports and a
-    // preflight is told it may use.  Upstream names one method per route in
-    // Allow because Flask knows its routes; this handler dispatches on a
-    // chain of comparisons, so it reports the same set everywhere.
+    // What OPTIONS reports it answers.  Upstream names one method per route
+    // because Flask knows its routes; this handler dispatches on a chain of
+    // comparisons, so it reports the same set everywhere.
     private static final String ALLOWED_METHODS =
+            "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS";
+    // What a preflight is told it may use, which upstream fixes without
+    // HEAD whatever the route.
+    private static final String ACCESS_CONTROL_METHODS =
             "GET, POST, PUT, DELETE, PATCH, OPTIONS";
     // Buffer parts in memory instead of spilling them to temporary files,
     // matching the previous MultiPartFormInputStream behavior.  Parts remain
@@ -156,6 +159,11 @@ public class HttpBinHandler extends Handler.Abstract {
             return;
         }
         Fields params = Request.extractQueryParameters(request);
+        // A HEAD asks for what a GET would answer without the body, which
+        // Jetty leaves off while keeping the Content-Length it would have
+        // had, so every route a GET reaches answers one.
+        boolean getOrHead = method.equals("GET") ||
+                method.equals("HEAD");
         try {
             if (method.equals("OPTIONS")) {
                 // A browser discards a preflight that does not succeed, so
@@ -188,7 +196,7 @@ public class HttpBinHandler extends Handler.Abstract {
                             prefix + "/redirect/1");
                 }
                 return;
-            } else if (method.equals("GET") && uri.equals("/headers")) {
+            } else if (getOrHead && uri.equals("/headers")) {
                 JSONObject headers = new JSONObject();
                 HttpFields fields = request.getHeaders();
                 for (String headerName : fields.getFieldNamesCollection()) {
@@ -199,18 +207,18 @@ public class HttpBinHandler extends Handler.Abstract {
                 json.put("headers", headers);
                 respondJSON(response, os, json);
                 return;
-            } else if (method.equals("GET") && uri.equals("/ip")) {
+            } else if (getOrHead && uri.equals("/ip")) {
                 JSONObject json = new JSONObject();
                 json.put("origin", getOrigin(request));
                 respondJSON(response, os, json);
                 return;
-            } else if (method.equals("GET") && uri.equals("/user-agent")) {
+            } else if (getOrHead && uri.equals("/user-agent")) {
                 JSONObject json = new JSONObject();
                 json.put("user-agent", request.getHeaders().get(
                         HttpHeader.USER_AGENT));
                 respondJSON(response, os, json);
                 return;
-            } else if (method.equals("GET") && uri.equals("/gzip")) {
+            } else if (getOrHead && uri.equals("/gzip")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 JSONObject json = new JSONObject();
@@ -237,7 +245,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(compressed);
                 os.flush();
                 return;
-            } else if (method.equals("GET") && uri.equals("/deflate")) {
+            } else if (getOrHead && uri.equals("/deflate")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 JSONObject json = new JSONObject();
@@ -267,7 +275,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(compressed);
                 os.flush();
                 return;
-            } else if (method.equals("GET") && uri.equals("/brotli")) {
+            } else if (getOrHead && uri.equals("/brotli")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 // Upstream reports the method here and leaves out the args
@@ -289,7 +297,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(compressed);
                 os.flush();
                 return;
-            } else if (method.equals("GET") && uri.equals("/cache")) {
+            } else if (getOrHead && uri.equals("/cache")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 HttpFields fields = request.getHeaders();
@@ -307,7 +315,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 respondJSON(response, os, json);
                 return;
-            } else if (method.equals("GET") && uri.startsWith("/cache/")) {
+            } else if (getOrHead && uri.startsWith("/cache/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int seconds = Integer.parseInt(uri.substring(
@@ -323,7 +331,7 @@ public class HttpBinHandler extends Handler.Abstract {
                         "public, max-age=" + seconds);
                 respondJSON(response, os, json);
                 return;
-            } else if (method.equals("GET") && uri.startsWith("/delay/")) {
+            } else if (getOrHead && uri.startsWith("/delay/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int delayMs = (int) (1000 * Double.parseDouble(uri.substring(
@@ -342,7 +350,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 respondJSON(response, os, json);
                 return;
-            } else if (method.equals("GET") && uri.startsWith("/etag/")) {
+            } else if (getOrHead && uri.startsWith("/etag/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 String eTag = uri.substring("/etag/".length());
@@ -369,7 +377,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 response.getHeaders().put(HttpHeader.ETAG, eTag);
                 return;
-            } else if (method.equals("GET") && uri.equals("/drip")) {
+            } else if (getOrHead && uri.equals("/drip")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 long durationMs = (long) (1000 * Utils.getDoubleParameter(
@@ -392,7 +400,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if (method.equals("GET") && uri.startsWith("/stream/")) {
+            } else if (getOrHead && uri.startsWith("/stream/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int responses = Integer.parseInt(uri.substring(
@@ -420,7 +428,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if (method.equals("GET") && uri.startsWith(
+            } else if (getOrHead && uri.startsWith(
                     "/stream-bytes/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
@@ -444,7 +452,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 return;
             } else if ((method.equals("DELETE") && uri.equals("/delete")) ||
-                    (method.equals("GET") && uri.equals("/get")) ||
+                    (getOrHead && uri.equals("/get")) ||
                     (method.equals("PATCH") && uri.equals("/patch")) ||
                     (method.equals("POST") && uri.equals("/post")) ||
                     (method.equals("PUT") && uri.equals("/put"))) {
@@ -545,7 +553,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if ((method.equals("GET") || method.equals("POST")) &&
+            } else if ((getOrHead || method.equals("POST")) &&
                     uri.equals("/response-headers")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 // Collect the headers separately from the response, which
@@ -654,7 +662,7 @@ public class HttpBinHandler extends Handler.Abstract {
                         uri.substring("/digest-auth/".length()), params,
                         cookiePath);
                 return;
-            } else if (method.equals("GET") && uri.equals("/bearer")) {
+            } else if (getOrHead && uri.equals("/bearer")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 String header = request.getHeaders().get(
@@ -694,7 +702,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 json.put("data", data.toString(StandardCharsets.UTF_8));
                 respondJSON(response, os, json);
                 return;
-            } else if (method.equals("GET") && uri.startsWith("/bytes/")) {
+            } else if (getOrHead && uri.startsWith("/bytes/")) {
                 long length = Long.parseLong(uri.substring(
                         "/bytes/".length()));
                 int seed = Utils.getIntParameter(params, "seed", -1);
@@ -712,7 +720,7 @@ public class HttpBinHandler extends Handler.Abstract {
                     i += count;
                 }
                 return;
-            } else if (method.equals("GET") && uri.startsWith("/base64/")) {
+            } else if (getOrHead && uri.startsWith("/base64/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 byte[] body = Base64.getDecoder().decode(
                         uri.substring("/base64/".length()));
@@ -720,7 +728,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(body);
                 os.flush();
                 return;
-            } else if (method.equals("GET") && uri.startsWith("/range/")) {
+            } else if (getOrHead && uri.startsWith("/range/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 long size = Long.parseLong(uri.substring("/range/".length()));
@@ -769,32 +777,32 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.flush();
 
                 return;
-            } else if (method.equals("GET") && uri.equals("/image/jpeg")) {
+            } else if (getOrHead && uri.equals("/image/jpeg")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().add(HttpHeader.CONTENT_TYPE,
                         "image/jpeg");
                 copyResource(response, os, "/image.jpg");
                 return;
-            } else if (method.equals("GET") && uri.equals("/image/png")) {
+            } else if (getOrHead && uri.equals("/image/png")) {
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().add(HttpHeader.CONTENT_TYPE,
                         "image/png");
                 copyResource(response, os, "/image.png");
                 return;
-            } else if (method.equals("GET") && uri.equals("/html")) {
+            } else if (getOrHead && uri.equals("/html")) {
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().add(HttpHeader.CONTENT_TYPE,
                         MimeTypes.Type.TEXT_HTML_UTF_8.asString());
                 copyResource(response, os, "/text.html");
                 return;
-            } else if (method.equals("GET") && uri.equals("/xml")) {
+            } else if (getOrHead && uri.equals("/xml")) {
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().add(HttpHeader.CONTENT_TYPE,
                         "application/xml");
                 copyResource(response, os, "/text.xml");
                 return;
-            } else if (method.equals("GET") && uri.equals("/robots.txt")) {
+            } else if (getOrHead && uri.equals("/robots.txt")) {
                 byte[] output = ("User-agent: *\nDisallow: " + prefix +
                         "/deny\n").getBytes(StandardCharsets.UTF_8);
 
@@ -803,7 +811,7 @@ public class HttpBinHandler extends Handler.Abstract {
                         MimeTypes.Type.TEXT_PLAIN.asString());
                 os.write(output);
                 return;
-            } else if (method.equals("GET") && uri.equals("/deny")) {
+            } else if (getOrHead && uri.equals("/deny")) {
                 byte[] output = (
                         "    .-''''''-." +
                         "  .' _      _ '." +
@@ -851,7 +859,8 @@ public class HttpBinHandler extends Handler.Abstract {
         if (!request.getMethod().equals("OPTIONS")) {
             return;
         }
-        headers.put(HttpHeader.ACCESS_CONTROL_ALLOW_METHODS, ALLOWED_METHODS);
+        headers.put(HttpHeader.ACCESS_CONTROL_ALLOW_METHODS,
+                ACCESS_CONTROL_METHODS);
         headers.put(HttpHeader.ACCESS_CONTROL_MAX_AGE, "3600");
         String requested = fields.get(
                 HttpHeader.ACCESS_CONTROL_REQUEST_HEADERS);
