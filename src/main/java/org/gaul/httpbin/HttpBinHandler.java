@@ -26,7 +26,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.Deflater;
@@ -60,6 +62,10 @@ public class HttpBinHandler extends Handler.Abstract {
             HttpBinHandler.class);
     private static final int MAX_DELAY_MS = 10 * 1000;
     private static final String OCTET_STREAM = "application/octet-stream";
+    private static final List<String> ACCEPTED_MEDIA_TYPES = List.of(
+            "image/webp", "image/svg+xml", "image/jpeg", "image/png",
+            "image/*");
+    private static final int MAX_LINKS = 200;
     // The keys that only a request body can answer.
     private static final List<String> BODY_KEYS =
             List.of("form", "files", "data", "json");
@@ -179,10 +185,9 @@ public class HttpBinHandler extends Handler.Abstract {
                 response.setStatus(HttpStatus.OK_200);
                 return;
             } else if (uri.equals("/")) {
-                response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().add(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
-                copyResource(response, os, "/home.html");
+                serveResource(response, os,
+                        MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
+                        "/home.html");
                 return;
             } else if (uri.startsWith("/status/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -214,6 +219,12 @@ public class HttpBinHandler extends Handler.Abstract {
             } else if (getOrHead && uri.equals("/ip")) {
                 JSONObject json = new JSONObject();
                 json.put("origin", getOrigin(request));
+                respondJSON(response, os, json);
+                return;
+            } else if (getOrHead && uri.equals("/uuid")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                JSONObject json = new JSONObject();
+                json.put("uuid", UUID.randomUUID().toString());
                 respondJSON(response, os, json);
                 return;
             } else if (getOrHead && uri.equals("/user-agent")) {
@@ -441,6 +452,55 @@ public class HttpBinHandler extends Handler.Abstract {
                 respondJSON(response, os, describeRequest(request, is, params,
                         "url", "args", "form", "data", "origin", "headers",
                         "files", "json"));
+                return;
+            } else if (getOrHead && uri.startsWith("/links/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                String[] parts = uri.substring("/links/".length())
+                        .split("/", -1);
+                int count;
+                int offset;
+                try {
+                    count = Integer.parseInt(parts[0]);
+                    offset = parts.length == 1 ? -1 :
+                            Integer.parseInt(parts[1]);
+                } catch (NumberFormatException nfe) {
+                    response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+                    return;
+                }
+                if (parts.length > 2) {
+                    response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+                    return;
+                }
+                if (parts.length == 1) {
+                    // Naming no link to leave out lands on the first.
+                    redirectTo(response, prefix + "/links/" + count + "/0");
+                    return;
+                }
+
+                count = Math.min(Math.max(1, count), MAX_LINKS);
+                StringBuilder html = new StringBuilder(
+                        "<html><head><title>Links</title></head><body>");
+                for (int i = 0; i < count; ++i) {
+                    if (i == offset) {
+                        html.append(i).append(" ");
+                    } else {
+                        html.append("<a href=\'").append(prefix)
+                                .append("/links/").append(count).append("/")
+                                .append(i).append("\'>").append(i)
+                                .append("</a> ");
+                    }
+                }
+                html.append("</body></html>");
+
+                byte[] body = html.toString().getBytes(
+                        StandardCharsets.UTF_8);
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
+                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                        body.length);
+                response.setStatus(HttpStatus.OK_200);
+                os.write(body);
+                os.flush();
                 return;
             } else if (uri.equals("/redirect-to")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -710,28 +770,83 @@ public class HttpBinHandler extends Handler.Abstract {
                 return;
             } else if (getOrHead && uri.equals("/image/jpeg")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().add(HttpHeader.CONTENT_TYPE,
-                        "image/jpeg");
-                copyResource(response, os, "/image.jpg");
+                serveResource(response, os, "image/jpeg",
+                        "/image.jpg");
                 return;
             } else if (getOrHead && uri.equals("/image/png")) {
-                response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().add(HttpHeader.CONTENT_TYPE,
-                        "image/png");
-                copyResource(response, os, "/image.png");
+                serveResource(response, os, "image/png",
+                        "/image.png");
+                return;
+            } else if (getOrHead && uri.equals("/image/svg")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                serveResource(response, os, "image/svg+xml", "/image.svg");
+                return;
+            } else if (getOrHead && uri.equals("/image/webp")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                serveResource(response, os, "image/webp", "/image.webp");
+                return;
+            } else if (getOrHead && uri.equals("/image")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                String accept = request.getHeaders().get(HttpHeader.ACCEPT);
+                // Upstream reads the header rather than negotiating over it,
+                // so the first type it names that this serves wins.
+                accept = accept == null ? "image/png" :
+                        accept.toLowerCase(Locale.ROOT);
+                if (accept.contains("image/webp")) {
+                    serveResource(response, os, "image/webp", "/image.webp");
+                } else if (accept.contains("image/svg+xml")) {
+                    serveResource(response, os, "image/svg+xml",
+                            "/image.svg");
+                } else if (accept.contains("image/jpeg")) {
+                    serveResource(response, os, "image/jpeg", "/image.jpg");
+                } else if (accept.contains("image/png") ||
+                        accept.contains("image/*")) {
+                    serveResource(response, os, "image/png", "/image.png");
+                } else {
+                    JSONObject json = new JSONObject();
+                    json.put("message", "Client did not request a " +
+                            "supported media type.");
+                    json.put("accept", new JSONArray(ACCEPTED_MEDIA_TYPES));
+                    respondJSON(response, os, json,
+                            HttpStatus.NOT_ACCEPTABLE_406);
+                }
                 return;
             } else if (getOrHead && uri.equals("/html")) {
-                response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().add(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
-                copyResource(response, os, "/text.html");
+                serveResource(response, os,
+                        MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
+                        "/text.html");
                 return;
             } else if (getOrHead && uri.equals("/xml")) {
+                serveResource(response, os, "application/xml",
+                        "/text.xml");
+                return;
+            } else if (getOrHead && uri.equals("/json")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                serveResource(response, os,
+                        MimeTypes.Type.APPLICATION_JSON.asString(),
+                        "/slideshow.json");
+                return;
+            } else if (getOrHead && uri.equals("/encoding/utf8")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                serveResource(response, os,
+                        MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
+                        "/utf8.html");
+                return;
+            } else if (getOrHead && uri.equals("/forms/post")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                // The form posts back to this server, so where it posts to
+                // has to follow the prefix this one is serving beneath.
+                byte[] body = readResource("/forms-post.html").replace(
+                        "action=\"/post\"",
+                        "action=\"" + prefix + "/post\"").getBytes(
+                                StandardCharsets.UTF_8);
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
+                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                        body.length);
                 response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().add(HttpHeader.CONTENT_TYPE,
-                        "application/xml");
-                copyResource(response, os, "/text.xml");
+                os.write(body);
+                os.flush();
                 return;
             } else if (getOrHead && uri.equals("/robots.txt")) {
                 byte[] output = ("User-agent: *\nDisallow: " + prefix +
@@ -844,6 +959,19 @@ public class HttpBinHandler extends Handler.Abstract {
 
     private static void redirectTo(Response response, String location) {
         redirectTo(response, location, HttpStatus.MOVED_TEMPORARILY_302);
+    }
+
+    private void serveResource(Response response, OutputStream os,
+            String contentType, String resource) throws IOException {
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE, contentType);
+        response.setStatus(HttpStatus.OK_200);
+        copyResource(response, os, resource);
+    }
+
+    private String readResource(String resource) throws IOException {
+        try (InputStream is = getClass().getResourceAsStream(resource)) {
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
     }
 
     private void copyResource(Response response, OutputStream os,

@@ -207,6 +207,18 @@ public final class HttpBinPrefixTest {
                         "Max-Age=0; Path=" + PREFIX);
     }
 
+    /** A page that links back into this server carries the prefix. */
+    @Test
+    public void testGeneratedPagesCarryPrefix() throws Exception {
+        assertThat(location("/links/3")).isEqualTo(PREFIX + "/links/3/0");
+        assertThat(client.GET(base + PREFIX + "/links/3/0")
+                .getContentAsString())
+                .contains("href='" + PREFIX + "/links/3/1'");
+        assertThat(client.GET(base + PREFIX + "/forms/post")
+                .getContentAsString())
+                .contains("action=\"" + PREFIX + "/post\"");
+    }
+
     @Test
     public void testRobotsTxtNamesPrefixedPath() throws Exception {
         ContentResponse response = client.GET(base + PREFIX + "/robots.txt");

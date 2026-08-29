@@ -54,9 +54,17 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/bearer` Challenges HTTP Bearer Auth and returns the token.
 - `/digest-auth/:qop/:user/:passwd[/:algorithm[/:stale_after]]` Challenges HTTP Digest Auth.
 - `/html` Returns some HTML.
+- `/forms/post` Returns an HTML form that posts to `/post`.
+- `/links/:n[/:offset]` Returns a page of _n_ links.
+- `/encoding/utf8` Returns a page of UTF-8 encoded text.
 - `/xml` Returns some XML.
+- `/json` Returns a sample JSON document.
+- `/uuid` Returns a UUID4.
 - `/image/png` Returns page containing a PNG image.
 - `/image/jpeg` Returns page containing a JPEG image.
+- `/image/svg` Returns page containing an SVG image.
+- `/image/webp` Returns page containing a WebP image.
+- `/image` Returns an image the Accept header names, or 406.
 
 `/brotli` answers with a valid Brotli stream that stores its bytes rather
 than compressing them: the JDK ships no Brotli encoder, and the ones on offer

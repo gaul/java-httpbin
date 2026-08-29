@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 import org.brotli.dec.BrotliInputStream;
 import org.eclipse.jetty.client.ContentResponse;
@@ -294,6 +295,75 @@ public final class HttpBinTest {
                         "Digest username=\"user\", response=\"wrong\", " +
                                 "nonce=\"wrong\""))
                 .send();
+    }
+
+    @Test
+    public void testUuid() throws Exception {
+        ContentResponse response = client.GET(httpBinEndpoint + "/uuid");
+        assertThat(response.getStatus()).as("status").isEqualTo(200);
+        String uuid = new JSONObject(response.getContentAsString())
+                .getString("uuid");
+        assertThat(UUID.fromString(uuid)).hasToString(uuid);
+        assertThat(new JSONObject(client.GET(httpBinEndpoint + "/uuid")
+                .getContentAsString()).getString("uuid")).isNotEqualTo(uuid);
+    }
+
+    /** Upstream reads the Accept header rather than negotiating over it. */
+    @Test
+    public void testImageAccepted() throws Exception {
+        assertImage("image/webp", "image/webp");
+        assertImage("image/svg+xml", "image/svg+xml");
+        assertImage("image/jpeg", "image/jpeg");
+        assertImage("image/png", "image/png");
+        assertImage("image/*", "image/png");
+        assertImage("IMAGE/WEBP", "image/webp");
+        assertImage("text/html,image/jpeg;q=0.9", "image/jpeg");
+
+        ContentResponse response = client.newRequest(
+                httpBinEndpoint + "/image")
+                .headers(fields -> fields.put(HttpHeader.ACCEPT, "text/plain"))
+                .send();
+        assertThat(response.getStatus()).as("unsupported").isEqualTo(406);
+        JSONObject object = new JSONObject(response.getContentAsString());
+        assertThat(object.getString("message"))
+                .isEqualTo("Client did not request a supported media type.");
+        assertThat(object.getJSONArray("accept").length()).isEqualTo(5);
+    }
+
+    private void assertImage(String accept, String contentType)
+            throws Exception {
+        ContentResponse response = client.newRequest(
+                httpBinEndpoint + "/image")
+                .headers(fields -> fields.put(HttpHeader.ACCEPT, accept))
+                .send();
+        assertThat(response.getStatus()).as(accept).isEqualTo(200);
+        assertThat(response.getHeaders().get(HttpHeader.CONTENT_TYPE))
+                .as(accept).isEqualTo(contentType);
+        assertThat(response.getContent()).as(accept).isNotEmpty();
+    }
+
+    @Test
+    public void testLinks() throws Exception {
+        ContentResponse response = client.newRequest(
+                httpBinEndpoint + "/links/3")
+                .followRedirects(false)
+                .send();
+        assertThat(response.getStatus()).as("status").isEqualTo(302);
+        assertThat(response.getHeaders().get(HttpHeader.LOCATION))
+                .isEqualTo("/links/3/0");
+
+        assertThat(client.GET(httpBinEndpoint + "/links/3/1")
+                .getContentAsString()).isEqualTo(
+                        "<html><head><title>Links</title></head><body>" +
+                        "<a href='/links/3/0'>0</a> 1 " +
+                        "<a href='/links/3/2'>2</a> </body></html>");
+
+        // Upstream serves between one and two hundred links, whatever it is
+        // asked for.
+        assertThat(client.GET(httpBinEndpoint + "/links/0/0")
+                .getContentAsString()).contains("<body>0 </body>");
+        assertThat(client.GET(httpBinEndpoint + "/links/500/0")
+                .getContentAsString()).contains("/links/200/199");
     }
 
     /** A part naming a file is reported apart from the rest. */
