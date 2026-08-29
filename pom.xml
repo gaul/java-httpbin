@@ -345,6 +345,13 @@
       <version>3.27.7</version>
     </dependency>
     <dependency>
+      <!-- Decodes what Brotli.java writes; the encoder needs no library. -->
+      <groupId>org.brotli</groupId>
+      <artifactId>dec</artifactId>
+      <version>0.1.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-client</artifactId>
       <version>${jetty.version}</version>

@@ -19,8 +19,11 @@ package org.gaul.httpbin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayInputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
+import org.brotli.dec.BrotliInputStream;
 import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.MultiPartRequestContent;
@@ -102,6 +105,25 @@ public final class HttpBinTest {
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
         assertThat(object.getJSONObject("form").similar(input)).isTrue();
+    }
+
+    @Test
+    public void testBrotli() throws Exception {
+        ContentResponse response = client.GET(httpBinEndpoint + "/brotli");
+        assertThat(response.getStatus()).as("status").isEqualTo(200);
+        assertThat(response.getHeaders().get(HttpHeader.CONTENT_ENCODING))
+                .isEqualTo("br");
+
+        byte[] body;
+        try (BrotliInputStream is = new BrotliInputStream(
+                new ByteArrayInputStream(response.getContent()))) {
+            body = is.readAllBytes();
+        }
+        JSONObject json = new JSONObject(
+                new String(body, StandardCharsets.UTF_8));
+        assertThat(json.getBoolean("brotli")).isTrue();
+        assertThat(json.getString("method")).isEqualTo("GET");
+        assertThat(json.getJSONObject("headers")).isNotNull();
     }
 
     @Test

@@ -45,6 +45,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/response-headers?key=value` Sets the given response headers and returns them as JSON.
 - `/gzip` Returns gzip-encoded data.
 - `/deflate` Returns deflate-encoded data.
+- `/brotli` Returns Brotli-encoded data.
 - `/robots.txt` Returns some robots.txt rules.
 - `/deny` Denied by robots.txt file.
 - `/basic-auth/:user/:passwd` Challenges HTTP Basic Auth.
@@ -55,6 +56,11 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/xml` Returns some XML.
 - `/image/png` Returns page containing a PNG image.
 - `/image/jpeg` Returns page containing a JPEG image.
+
+`/brotli` answers with a valid Brotli stream that stores its bytes rather
+than compressing them: the JDK ships no Brotli encoder, and the ones on offer
+bind to a native library that everything depending on this library would then
+have to carry.
 
 Every response carries the CORS headers httpbin sends.  `OPTIONS` answers a
 preflight with the 200 a browser requires before it will send the request

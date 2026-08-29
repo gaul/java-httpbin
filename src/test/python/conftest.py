@@ -69,7 +69,6 @@ SKIP = {
 #: the run red until that happens.
 XFAIL = {
     # Endpoints java-httpbin does not serve, which answer 501.
-    "test_brotli": "/brotli is not implemented",
 
     # Upstream asserts its own limitation here: it answers 501 to a chunked
     # request, which java-httpbin accepts.  Upstream carries the assertion it

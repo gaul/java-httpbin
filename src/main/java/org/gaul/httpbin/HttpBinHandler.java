@@ -267,6 +267,28 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(compressed);
                 os.flush();
                 return;
+            } else if (method.equals("GET") && uri.equals("/brotli")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                // Upstream reports the method here and leaves out the args
+                // and url that /gzip and /deflate above have long carried.
+                JSONObject json = new JSONObject();
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
+                json.put("origin", Request.getRemoteAddr(request));
+                json.put("method", method);
+                json.put("brotli", true);
+
+                byte[] compressed = Brotli.encode(jsonBody(json));
+
+                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                        compressed.length);
+                response.getHeaders().put(HttpHeader.CONTENT_ENCODING, "br");
+                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                        MimeTypes.Type.APPLICATION_JSON.asString());
+                response.setStatus(HttpStatus.OK_200);
+                os.write(compressed);
+                os.flush();
+                return;
             } else if (method.equals("GET") && uri.equals("/cache")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
