@@ -176,7 +176,16 @@ public final class HttpBinPrefixTest {
         response = client.GET(base + PREFIX + "/cookies");
         cookies = new JSONObject(response.getContentAsString())
                 .getJSONObject("cookies");
-        assertThat(cookies.optString("name")).isEmpty();
+        // Gone, rather than present and empty: a cookie the client still
+        // holds is one the endpoint failed to delete.
+        assertThat(cookies.has("name")).isFalse();
+
+        // The same, naming the cookie in the path instead of the query.
+        client.GET(base + PREFIX + "/cookies/set/name/value");
+        response = client.GET(base + PREFIX + "/cookies");
+        cookies = new JSONObject(response.getContentAsString())
+                .getJSONObject("cookies");
+        assertThat(cookies.getString("name")).isEqualTo("value");
     }
 
     /** The cookie must be scoped to the prefix, not to the whole origin. */
@@ -186,6 +195,16 @@ public final class HttpBinPrefixTest {
                 base + PREFIX + "/cookies/set?name=value");
         assertThat(response.getHeaders().get(HttpHeader.SET_COOKIE))
                 .isEqualTo("name=value; Path=" + PREFIX);
+
+        response = client.GET(base + PREFIX + "/cookies/set/name/value");
+        assertThat(response.getHeaders().get(HttpHeader.SET_COOKIE))
+                .isEqualTo("name=value; Path=" + PREFIX);
+
+        // Deleting scopes the same way, and expires what it names.
+        response = client.GET(base + PREFIX + "/cookies/delete?name");
+        assertThat(response.getHeaders().get(HttpHeader.SET_COOKIE))
+                .isEqualTo("name=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; " +
+                        "Max-Age=0; Path=" + PREFIX);
     }
 
     @Test

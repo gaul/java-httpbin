@@ -594,32 +594,48 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 respondJSON(response, os, json);
                 return;
-            } else if (uri.startsWith("/cookies/set")) {
+            } else if (uri.equals("/cookies/set")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 for (String name : params.getNames()) {
                     for (String value : params.getValues(name)) {
-                        response.getHeaders().add(HttpHeader.SET_COOKIE,
-                                "%s=%s; Path=%s".formatted(name, value,
-                                        cookiePath));
+                        setCookie(response, name, value);
                     }
                 }
 
-                response.getHeaders().put(HttpHeader.LOCATION,
-                        prefix + "/cookies");
-                response.setStatus(HttpStatus.MOVED_TEMPORARILY_302);
+                redirectTo(response, prefix + "/cookies");
                 return;
-            } else if (uri.startsWith("/cookies/delete")) {
+            } else if (uri.startsWith("/cookies/set/")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                // /cookies/set/name/value names one cookie in the path
+                // rather than the query.
+                String[] cookie = uri.substring(
+                        "/cookies/set/".length()).split("/", -1);
+                // Upstream's route matches neither an empty name nor an
+                // empty value, so neither names a cookie to set here.
+                if (cookie.length != 2 || cookie[0].isEmpty() ||
+                        cookie[1].isEmpty()) {
+                    response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+                    return;
+                }
+                setCookie(response, cookie[0], cookie[1]);
+
+                redirectTo(response, prefix + "/cookies");
+                return;
+            } else if (uri.equals("/cookies/delete")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 for (String name : params.getNames()) {
+                    // Emptying the value leaves the cookie in place; a
+                    // client drops it only once it has expired.
                     response.getHeaders().add(HttpHeader.SET_COOKIE,
-                            "%s=; Path=%s".formatted(name, cookiePath));
+                            ("%s=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; " +
+                                    "Max-Age=0; Path=%s").formatted(
+                                    name, cookiePath));
                 }
 
-                response.getHeaders().put(HttpHeader.LOCATION,
-                        prefix + "/cookies");
-                response.setStatus(HttpStatus.MOVED_TEMPORARILY_302);
+                redirectTo(response, prefix + "/cookies");
                 return;
             } else if (uri.startsWith("/basic-auth/")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -873,6 +889,11 @@ public class HttpBinHandler extends Handler.Abstract {
         response.setStatus(status);
         os.write(body);
         os.flush();
+    }
+
+    private void setCookie(Response response, String name, String value) {
+        response.getHeaders().add(HttpHeader.SET_COOKIE,
+                "%s=%s; Path=%s".formatted(name, value, cookiePath));
     }
 
     private static void redirectTo(Response response, String location,

@@ -36,6 +36,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/range/:s` Return a subset of data based on Content-range header.
 - `/cookies` Returns the cookies.
 - `/cookies/set?name=value` Sets one or more simple cookies.
+- `/cookies/set/:name/:value` Sets one simple cookie.
 - `/cookies/delete?name` Deletes one or more simple cookies.
 - `/drip?numbytes=n&duration=s&delay=s&code=code` Drips data over a duration after
   an optional initial _delay_, then optionally returns with the given status _code_.
