@@ -70,12 +70,6 @@ SKIP = {
 XFAIL = {
     # Endpoints java-httpbin does not serve, which answer 501.
     "test_brotli": "/brotli is not implemented",
-    "test_digest_auth": "/digest-auth is not implemented",
-    "test_digest_auth_with_wrong_authorization_type":
-        "/digest-auth is not implemented",
-    "test_digest_auth_with_wrong_password":
-        "/digest-auth is not implemented",
-    "test_digest_auth_wrong_pass": "/digest-auth is not implemented",
 
     # Upstream asserts its own limitation here: it answers 501 to a chunked
     # request, which java-httpbin accepts.  Upstream carries the assertion it
@@ -183,6 +177,12 @@ class _Client:
     #: Upstream only sets REMOTE_ADDR, which a real connection supplies.
     IGNORED = frozenset(["environ_base"])
 
+    def __init__(self):
+        # Upstream's test client keeps a cookie jar, and /digest-auth needs
+        # one: how many requests remain before a nonce goes stale lives in a
+        # cookie rather than on the server.
+        self._session = requests.Session()
+
     def get(self, path, **kwargs):
         return self.open(path, method="GET", **kwargs)
 
@@ -219,7 +219,7 @@ class _Client:
             headers["Content-Type"] = content_type
         # _body() may drop a header, so resolve it before the request.
         body = _body(data, headers)
-        return _Response(requests.request(
+        return _Response(self._session.request(
             method, _base_url + path, headers=headers, data=body,
             allow_redirects=False, timeout=30))
 

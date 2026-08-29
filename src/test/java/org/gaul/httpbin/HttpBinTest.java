@@ -25,6 +25,7 @@ import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.MultiPartRequestContent;
 import org.eclipse.jetty.client.StringRequestContent;
+import org.eclipse.jetty.http.HttpCookie;
 import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.MultiPart;
@@ -170,6 +171,51 @@ public final class HttpBinTest {
                 .method("OPTIONS")
                 .send();
         assertThat(response.getStatus()).as("status").isEqualTo(200);
+    }
+
+    /**
+     * The upstream suite cannot reach this path: its own implementation
+     * fails on any request carrying a query string, and require-cookie
+     * needs one.
+     */
+    @Test
+    public void testDigestAuthRequiresCookie() throws Exception {
+        String uri = httpBinEndpoint +
+                "/digest-auth/auth/user/passwd/MD5?require-cookie=true";
+        ContentResponse response = client.GET(uri);
+        assertThat(response.getStatus()).as("challenge").isEqualTo(401);
+        assertThat(response.getHeaders().get(HttpHeader.WWW_AUTHENTICATE))
+                .contains("Digest realm=");
+
+        // The challenge just set the cookie it wants to see, so take it away
+        // again.  A cookie reaches this client through its store, which
+        // writes the Cookie header itself.
+        putCookie("other", "1");
+        response = sendWrongCredentials(uri);
+        assertThat(response.getStatus()).as("cookie missing").isEqualTo(403);
+        JSONObject json = new JSONObject(response.getContentAsString());
+        assertThat(json.getJSONArray("errors").getString(0))
+                .isEqualTo("missing cookie set on challenge");
+
+        // The cookie carries the request as far as the password, which is
+        // still wrong.
+        putCookie("fake", "fake_value");
+        response = sendWrongCredentials(uri);
+        assertThat(response.getStatus()).as("cookie sent").isEqualTo(401);
+    }
+
+    private void putCookie(String name, String value) {
+        client.getHttpCookieStore().clear();
+        client.getHttpCookieStore().add(httpBinEndpoint,
+                HttpCookie.from(name, value));
+    }
+
+    private ContentResponse sendWrongCredentials(String uri) throws Exception {
+        return client.newRequest(uri)
+                .headers(fields -> fields.put(HttpHeader.AUTHORIZATION,
+                        "Digest username=\"user\", response=\"wrong\", " +
+                                "nonce=\"wrong\""))
+                .send();
     }
 
     @Test

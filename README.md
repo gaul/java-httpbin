@@ -50,6 +50,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/basic-auth/:user/:passwd` Challenges HTTP Basic Auth.
 - `/hidden-basic-auth/:user/:passwd` Challenges HTTP Basic Auth and returns 404 on failure.
 - `/bearer` Challenges HTTP Bearer Auth and returns the token.
+- `/digest-auth/:qop/:user/:passwd[/:algorithm[/:stale_after]]` Challenges HTTP Digest Auth.
 - `/html` Returns some HTML.
 - `/xml` Returns some XML.
 - `/image/png` Returns page containing a PNG image.

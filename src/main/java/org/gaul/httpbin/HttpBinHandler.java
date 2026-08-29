@@ -611,6 +611,11 @@ public class HttpBinHandler extends Handler.Abstract {
                         uri.substring("/hidden-basic-auth/".length()),
                         HttpStatus.NOT_FOUND_404);
                 return;
+            } else if (uri.startsWith("/digest-auth/")) {
+                DigestAuth.handle(request, response, is, os,
+                        uri.substring("/digest-auth/".length()), params,
+                        cookiePath);
+                return;
             } else if (method.equals("GET") && uri.equals("/bearer")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
@@ -833,12 +838,17 @@ public class HttpBinHandler extends Handler.Abstract {
 
     private static void respondJSON(Response response, OutputStream os,
             JSONObject obj) throws IOException {
+        respondJSON(response, os, obj, HttpStatus.OK_200);
+    }
+
+    static void respondJSON(Response response, OutputStream os,
+            JSONObject obj, int status) throws IOException {
         byte[] body = jsonBody(obj);
 
         response.getHeaders().put(HttpHeader.CONTENT_LENGTH, body.length);
         response.getHeaders().put(HttpHeader.CONTENT_TYPE,
                 MimeTypes.Type.APPLICATION_JSON.asString());
-        response.setStatus(HttpStatus.OK_200);
+        response.setStatus(status);
         os.write(body);
         os.flush();
     }
