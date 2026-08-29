@@ -66,6 +66,36 @@ public class HttpBinHandler extends Handler.Abstract {
             "image/webp", "image/svg+xml", "image/jpeg", "image/png",
             "image/*");
     private static final int MAX_LINKS = 200;
+    private static final List<String> DELAY_METHODS =
+            List.of("POST", "PUT", "DELETE", "PATCH", "TRACE");
+    private static final String BASIC_REALM = "Basic realm=\"Fake Realm\"";
+    // Upstream's own words, and part of what a client sees from it.
+    private static final String PAYMENT_REQUIRED = "Fuck you, pay me!";
+    private static final String TEAPOT = """
+
+            -=[ teapot ]=-
+
+               _...._
+             .'  _ _ `.
+            | ."` ^ `". _,
+            \\_;`"---"`|//
+              |       ;/
+              \\_     _/
+                `\"""`
+        """;
+    private static final String ANGRY = """
+
+                  .-''''''-.
+                .' _      _ '.
+               /   O      O   \\
+              :                :
+              |                |
+              :       __       :
+               \\  .-"`  `"-.  /
+                '.          .'
+                  '-......-'
+             YOU SHOULDN'T BE HERE
+        """;
     // The keys that only a request body can answer.
     private static final List<String> BODY_KEYS =
             List.of("form", "files", "data", "json");
@@ -200,9 +230,40 @@ public class HttpBinHandler extends Handler.Abstract {
                     return;
                 }
                 response.setStatus(status);
-                if (status >= 300 && status < 400) {
+                switch (status) {
+                case HttpStatus.MOVED_PERMANENTLY_301:
+                case HttpStatus.MOVED_TEMPORARILY_302:
+                case HttpStatus.SEE_OTHER_303:
+                case HttpStatus.USE_PROXY_305:
+                case HttpStatus.TEMPORARY_REDIRECT_307:
                     response.getHeaders().put(HttpHeader.LOCATION,
                             prefix + "/redirect/1");
+                    break;
+                case HttpStatus.UNAUTHORIZED_401:
+                    response.getHeaders().put(HttpHeader.WWW_AUTHENTICATE,
+                            BASIC_REALM);
+                    break;
+                case HttpStatus.PAYMENT_REQUIRED_402:
+                    response.getHeaders().put("x-more-info",
+                            "http://vimeo.com/22053820");
+                    respondBytes(response, os, PAYMENT_REQUIRED.getBytes(
+                            StandardCharsets.UTF_8));
+                    break;
+                case HttpStatus.NOT_ACCEPTABLE_406:
+                    respondNotAcceptable(response, os);
+                    break;
+                case HttpStatus.PROXY_AUTHENTICATION_REQUIRED_407:
+                    response.getHeaders().put(HttpHeader.PROXY_AUTHENTICATE,
+                            BASIC_REALM);
+                    break;
+                case HttpStatus.IM_A_TEAPOT_418:
+                    response.getHeaders().put("x-more-info",
+                            "http://tools.ietf.org/html/rfc2324");
+                    respondBytes(response, os, TEAPOT.getBytes(
+                            StandardCharsets.UTF_8));
+                    break;
+                default:
+                    break;
                 }
                 return;
             } else if (getOrHead && uri.equals("/headers")) {
@@ -306,6 +367,10 @@ public class HttpBinHandler extends Handler.Abstract {
                     return;
                 }
 
+                response.getHeaders().putDate(HttpHeader.LAST_MODIFIED,
+                        System.currentTimeMillis());
+                response.getHeaders().put(HttpHeader.ETAG,
+                        UUID.randomUUID().toString().replace("-", ""));
                 respondJSON(response, os, describeRequest(request, is,
                         params, "url", "args", "headers", "origin"));
                 return;
@@ -322,7 +387,8 @@ public class HttpBinHandler extends Handler.Abstract {
                         "public, max-age=" + seconds);
                 respondJSON(response, os, json);
                 return;
-            } else if (getOrHead && uri.startsWith("/delay/")) {
+            } else if (uri.startsWith("/delay/") && (getOrHead ||
+                    DELAY_METHODS.contains(method))) {
                 int delayMs = (int) (1000 * Double.parseDouble(uri.substring(
                         "/delay/".length())));
                 try {
@@ -361,6 +427,8 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 response.getHeaders().put(HttpHeader.ETAG, eTag);
+                respondJSON(response, os, describeRequest(request, is, params,
+                        "url", "args", "headers", "origin"));
                 return;
             } else if (getOrHead && uri.equals("/drip")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -803,12 +871,7 @@ public class HttpBinHandler extends Handler.Abstract {
                         accept.contains("image/*")) {
                     serveResource(response, os, "image/png", "/image.png");
                 } else {
-                    JSONObject json = new JSONObject();
-                    json.put("message", "Client did not request a " +
-                            "supported media type.");
-                    json.put("accept", new JSONArray(ACCEPTED_MEDIA_TYPES));
-                    respondJSON(response, os, json,
-                            HttpStatus.NOT_ACCEPTABLE_406);
+                    respondNotAcceptable(response, os);
                 }
                 return;
             } else if (getOrHead && uri.equals("/html")) {
@@ -849,32 +912,21 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.flush();
                 return;
             } else if (getOrHead && uri.equals("/robots.txt")) {
-                byte[] output = ("User-agent: *\nDisallow: " + prefix +
-                        "/deny\n").getBytes(StandardCharsets.UTF_8);
-
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().put(HttpHeader.CONTENT_TYPE,
                         MimeTypes.Type.TEXT_PLAIN.asString());
-                os.write(output);
+                respondBytes(response, os, ("User-agent: *\nDisallow: " +
+                        prefix + "/deny\n").getBytes(
+                                StandardCharsets.UTF_8));
                 return;
             } else if (getOrHead && uri.equals("/deny")) {
-                byte[] output = (
-                        "    .-''''''-." +
-                        "  .' _      _ '." +
-                        " /   O      O   \"" +
-                        ":                :" +
-                        "|                |" +
-                        ":       __       :" +
-                        " \\  .-\"'  '\"-.  /" +
-                        "  '.          .'" +
-                        "     '-......-'" +
-                        "YOU SHOULDN'T BE HERE").getBytes(
-                                StandardCharsets.UTF_8);
-
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().put(HttpHeader.CONTENT_TYPE,
                         MimeTypes.Type.TEXT_PLAIN.asString());
-                os.write(output);
+                respondBytes(response, os, ANGRY.getBytes(
+                        StandardCharsets.UTF_8));
                 return;
             }
             response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
@@ -949,6 +1001,23 @@ public class HttpBinHandler extends Handler.Abstract {
     private void setCookie(Response response, String name, String value) {
         response.getHeaders().add(HttpHeader.SET_COOKIE,
                 "%s=%s; Path=%s".formatted(name, value, cookiePath));
+    }
+
+    /** Writes a body the caller has already chosen a status for. */
+    private static void respondBytes(Response response, OutputStream os,
+            byte[] body) throws IOException {
+        response.getHeaders().put(HttpHeader.CONTENT_LENGTH, body.length);
+        os.write(body);
+        os.flush();
+    }
+
+    private static void respondNotAcceptable(Response response,
+            OutputStream os) throws IOException {
+        JSONObject json = new JSONObject();
+        json.put("message", "Client did not request a " +
+                "supported media type.");
+        json.put("accept", new JSONArray(ACCEPTED_MEDIA_TYPES));
+        respondJSON(response, os, json, HttpStatus.NOT_ACCEPTABLE_406);
     }
 
     private static void redirectTo(Response response, String location,
@@ -1215,12 +1284,30 @@ public class HttpBinHandler extends Handler.Abstract {
                 .asString() + prefix;
     }
 
+    /**
+     * Refuses a request, asking for credentials when that is what is
+     * missing.
+     *
+     * <p>/hidden-basic-auth answers 404 instead and says nothing about
+     * authentication, which is the point of it.
+     *
+     * @param response response to refuse with
+     * @param failureStatus status this endpoint refuses with
+     */
+    private static void challengeBasic(Response response, int failureStatus) {
+        if (failureStatus == HttpStatus.UNAUTHORIZED_401) {
+            response.getHeaders().put(HttpHeader.WWW_AUTHENTICATE,
+                    BASIC_REALM);
+        }
+        response.setStatus(failureStatus);
+    }
+
     private static void handleBasicAuth(Request request, Response response,
             OutputStream os, String suffix, int failureStatus)
             throws IOException {
         String header = request.getHeaders().get(HttpHeader.AUTHORIZATION);
         if (header == null || !header.startsWith("Basic ")) {
-            response.setStatus(failureStatus);
+            challengeBasic(response, failureStatus);
             return;
         }
 
@@ -1230,7 +1317,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 bytes, StandardCharsets.UTF_8).split(":", 2);
         String[] auth = suffix.split("/", 2);
         if (auth.length != 2 || !Arrays.equals(auth, parts)) {
-            response.setStatus(failureStatus);
+            challengeBasic(response, failureStatus);
             return;
         }
 

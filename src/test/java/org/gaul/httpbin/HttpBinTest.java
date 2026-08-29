@@ -297,6 +297,87 @@ public final class HttpBinTest {
                 .send();
     }
 
+    /** Upstream answers some status codes with more than a status. */
+    @Test
+    public void testStatusCarriesWhatUpstreamSends() throws Exception {
+        for (int code : new int[] {301, 302, 303, 305, 307}) {
+            assertThat(status(code).getHeaders().get(HttpHeader.LOCATION))
+                    .as("%d", code).isEqualTo("/redirect/1");
+        }
+        // These are not in upstream's table, so they name no location.
+        for (int code : new int[] {300, 304, 306, 308}) {
+            assertThat(status(code).getHeaders().get(HttpHeader.LOCATION))
+                    .as("%d", code).isNull();
+        }
+
+        assertThat(status(401).getHeaders().get(HttpHeader.WWW_AUTHENTICATE))
+                .isEqualTo("Basic realm=\"Fake Realm\"");
+        assertThat(status(407).getHeaders().get(HttpHeader.PROXY_AUTHENTICATE))
+                .isEqualTo("Basic realm=\"Fake Realm\"");
+
+        ContentResponse response = status(402);
+        assertThat(response.getContentAsString())
+                .isEqualTo("Fuck you, pay me!");
+        assertThat(response.getHeaders().get("x-more-info"))
+                .isEqualTo("http://vimeo.com/22053820");
+
+        response = status(418);
+        assertThat(response.getContentAsString()).contains("-=[ teapot ]=-")
+                .contains("`\"\"\"`");
+        assertThat(response.getHeaders().get("x-more-info"))
+                .isEqualTo("http://tools.ietf.org/html/rfc2324");
+
+        assertThat(new JSONObject(status(406).getContentAsString())
+                .getJSONArray("accept").length()).isEqualTo(5);
+    }
+
+    private ContentResponse status(int code) throws Exception {
+        return client.newRequest(httpBinEndpoint + "/status/" + code)
+                .followRedirects(false)
+                .send();
+    }
+
+    @Test
+    public void testConditionalEndpoints() throws Exception {
+        // /cache names the thing a later request would ask about.
+        ContentResponse response = client.GET(httpBinEndpoint + "/cache");
+        assertThat(response.getHeaders().get(HttpHeader.ETAG)).hasSize(32);
+        assertThat(response.getHeaders().get(HttpHeader.LAST_MODIFIED))
+                .isNotNull();
+
+        // /etag answers with what /get would, plus the tag.
+        response = client.GET(httpBinEndpoint + "/etag/abc");
+        assertThat(response.getHeaders().get(HttpHeader.ETAG))
+                .isEqualTo("abc");
+        assertThat(new JSONObject(response.getContentAsString()).keySet())
+                .containsExactlyInAnyOrder("url", "args", "headers", "origin");
+
+        // A challenge says what it wants; the hidden one says nothing.
+        response = client.GET(httpBinEndpoint + "/basic-auth/user/passwd");
+        assertThat(response.getStatus()).as("basic").isEqualTo(401);
+        assertThat(response.getHeaders().get(HttpHeader.WWW_AUTHENTICATE))
+                .isEqualTo("Basic realm=\"Fake Realm\"");
+        response = client.GET(
+                httpBinEndpoint + "/hidden-basic-auth/user/passwd");
+        assertThat(response.getStatus()).as("hidden").isEqualTo(404);
+        assertThat(response.getHeaders().get(HttpHeader.WWW_AUTHENTICATE))
+                .isNull();
+    }
+
+    /** Upstream delays whichever method asks it to. */
+    @Test
+    public void testDelayAnswersEveryMethod() throws Exception {
+        for (String method : new String[] {
+            "GET", "POST", "PUT", "DELETE", "PATCH",
+        }) {
+            ContentResponse response = client.newRequest(
+                    httpBinEndpoint + "/delay/0")
+                    .method(method)
+                    .send();
+            assertThat(response.getStatus()).as(method).isEqualTo(200);
+        }
+    }
+
     @Test
     public void testUuid() throws Exception {
         ContentResponse response = client.GET(httpBinEndpoint + "/uuid");
