@@ -42,6 +42,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/cache` Returns 200 unless an If-Modified-Since or If-None-Match header is provided, when it returns a 304.
 - `/cache/:n` Sets a Cache-Control header for _n_ seconds.
 - `/etag` Return 200 when If-Match or If-None-Match succeed.
+- `/response-headers?key=value` Sets the given response headers and returns them as JSON.
 - `/gzip` Returns gzip-encoded data.
 - `/deflate` Returns deflate-encoded data.
 - `/robots.txt` Returns some robots.txt rules.

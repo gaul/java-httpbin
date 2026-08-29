@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -47,6 +48,7 @@ import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Response;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.Fields;
+import org.eclipse.jetty.util.UrlEncoded;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -197,13 +199,12 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapHeadersToJSON(request));
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
                 json.put("origin", Request.getRemoteAddr(request));
                 json.put("url", getFullURL(request));
                 json.put("gzipped", true);
 
-                byte[] uncompressed = json.toString(/*indent=*/ 2).getBytes(
-                        StandardCharsets.UTF_8);
+                byte[] uncompressed = jsonBody(json);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream(
                         uncompressed.length);
                 try (GZIPOutputStream gzipos = new GZIPOutputStream(baos)) {
@@ -225,13 +226,12 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapHeadersToJSON(request));
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
                 json.put("origin", Request.getRemoteAddr(request));
                 json.put("url", getFullURL(request));
                 json.put("deflated", true);
 
-                byte[] uncompressed = json.toString(/*indent=*/ 2).getBytes(
-                        StandardCharsets.UTF_8);
+                byte[] uncompressed = jsonBody(json);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream(
                         uncompressed.length);
                 try (DeflaterOutputStream dos = new DeflaterOutputStream(
@@ -263,7 +263,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapHeadersToJSON(request));
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
                 json.put("origin", Request.getRemoteAddr(request));
                 json.put("url", getFullURL(request));
 
@@ -277,7 +277,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapHeadersToJSON(request));
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
                 json.put("origin", Request.getRemoteAddr(request));
                 json.put("url", getFullURL(request));
 
@@ -298,7 +298,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapHeadersToJSON(request));
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
                 json.put("origin", Request.getRemoteAddr(request));
                 json.put("url", getFullURL(request));
 
@@ -308,27 +308,24 @@ public class HttpBinHandler extends Handler.Abstract {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 String eTag = uri.substring("/etag/".length());
+                HttpFields fields = request.getHeaders();
+                List<String> ifNoneMatch = parseMultiValueHeader(
+                        fields.get(HttpHeader.IF_NONE_MATCH));
+                List<String> ifMatch = parseMultiValueHeader(
+                        fields.get(HttpHeader.IF_MATCH));
 
-                String ifMatch = request.getHeaders().get(HttpHeader.IF_MATCH);
-                if (ifMatch == null) {
-                    // nothing
-                } else if (ifMatch.equals("*") || ifMatch.equals(eTag)) {
-                    response.setStatus(HttpStatus.OK_200);
-                    response.getHeaders().put(HttpHeader.ETAG, eTag);
-                    return;
-                } else {
+                // Upstream lets If-None-Match answer on its own when both
+                // arrive, so If-Match only applies without it.
+                if (!ifNoneMatch.isEmpty()) {
+                    if (ifNoneMatch.contains(eTag) ||
+                            ifNoneMatch.contains("*")) {
+                        response.setStatus(HttpStatus.NOT_MODIFIED_304);
+                        response.getHeaders().put(HttpHeader.ETAG, eTag);
+                        return;
+                    }
+                } else if (!ifMatch.isEmpty() && !ifMatch.contains(eTag) &&
+                        !ifMatch.contains("*")) {
                     response.setStatus(HttpStatus.PRECONDITION_FAILED_412);
-                    return;
-                }
-
-                String ifNoneMatch = request.getHeaders().get(
-                        HttpHeader.IF_NONE_MATCH);
-                if (ifNoneMatch == null) {
-                    // nothing
-                } else if (ifNoneMatch.equals("*") || ifNoneMatch.equals(
-                        eTag)) {
-                    response.setStatus(HttpStatus.NOT_MODIFIED_304);
-                    response.getHeaders().put(HttpHeader.ETAG, eTag);
                     return;
                 }
 
@@ -372,7 +369,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                     JSONObject json = new JSONObject();
                     json.put("args", mapParametersToJSON(params));
-                    json.put("headers", mapHeadersToJSON(request));
+                    json.put("headers", mapFieldsToJSON(request.getHeaders()));
                     json.put("origin", Request.getRemoteAddr(request));
                     json.put("url", getFullURL(request));
                     json.put("id", i);
@@ -436,16 +433,27 @@ public class HttpBinHandler extends Handler.Abstract {
                     Utils.copy(is, baos);
                     String string = new String(
                             baos.toByteArray(), StandardCharsets.UTF_8);
-                    json.put("data", string);
-                    try {
-                        json.put("json", new JSONObject(string));
-                    } catch (JSONException e) {
-                        // client can provide non-JSON data
+                    if (contentType != null && contentType.startsWith(
+                            "application/x-www-form-urlencoded")) {
+                        // Upstream reports these as form and leaves data
+                        // empty, having consumed the body to parse them.
+                        Fields form = new Fields();
+                        UrlEncoded.decodeUtf8To(string, form);
+                        json.put("data", "");
+                        json.put("form", mapParametersToJSON(form));
+                        json.put("json", JSONObject.NULL);
+                    } else {
+                        json.put("data", string);
+                        try {
+                            json.put("json", new JSONObject(string));
+                        } catch (JSONException e) {
+                            // client can provide non-JSON data
+                        }
                     }
                 }
 
                 json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapHeadersToJSON(request));
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
                 json.put("origin", Request.getRemoteAddr(request));
                 json.put("url", getFullURL(request));
 
@@ -499,14 +507,40 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if (method.equals("GET") &&
+            } else if ((method.equals("GET") || method.equals("POST")) &&
                     uri.equals("/response-headers")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                // Collect the headers separately from the response, which
+                // already carries the Date and Server that the transport
+                // adds and upstream's body does not name.
+                HttpFields.Mutable fields = HttpFields.build();
                 for (String paramName : params.getNames()) {
-                    response.getHeaders().add(paramName, params.getValue(
-                            paramName));
+                    for (String value : params.getValues(paramName)) {
+                        fields.add(paramName, value);
+                    }
                 }
+                fields.put(HttpHeader.CONTENT_TYPE,
+                        MimeTypes.Type.APPLICATION_JSON.asString());
+
+                // The body names Content-Length among the rest, so its own
+                // length feeds back into it.  Render until that settles, as
+                // upstream does; it terminates because a longer body only
+                // ever adds digits.
+                byte[] body = new byte[0];
+                for (;;) {
+                    fields.put(HttpHeader.CONTENT_LENGTH, body.length);
+                    byte[] rendered = jsonBody(mapFieldsToJSON(fields));
+                    boolean settled = rendered.length == body.length;
+                    body = rendered;
+                    if (settled) {
+                        break;
+                    }
+                }
+
+                response.getHeaders().add(fields);
                 response.setStatus(HttpStatus.OK_200);
+                os.write(body);
+                os.flush();
                 return;
             } else if (uri.equals("/cookies")) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
@@ -569,7 +603,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 // Method
                 json.put("method", method);
                 json.put("args", mapParametersToJSON(params));
-                json.put("headers", mapHeadersToJSON(request));
+                json.put("headers", mapFieldsToJSON(request.getHeaders()));
                 json.put("origin", Request.getRemoteAddr(request));
                 json.put("url", getFullURL(request));
 
@@ -716,10 +750,23 @@ public class HttpBinHandler extends Handler.Abstract {
         }
     }
 
+    /**
+     * Renders a JSON body the way httpbin does, trailing newline included.
+     *
+     * <p>Upstream appends one in its jsonify wrapper, so a client comparing
+     * bodies byte for byte sees the same thing from either implementation.
+     *
+     * @param obj object to render
+     * @return the encoded body
+     */
+    private static byte[] jsonBody(JSONObject obj) {
+        return (obj.toString(/*indent=*/ 2) + "\n").getBytes(
+                StandardCharsets.UTF_8);
+    }
+
     private static void respondJSON(Response response, OutputStream os,
             JSONObject obj) throws IOException {
-        byte[] body = obj.toString(/*indent=*/ 2).getBytes(
-                StandardCharsets.UTF_8);
+        byte[] body = jsonBody(obj);
 
         response.getHeaders().put(HttpHeader.CONTENT_LENGTH, body.length);
         response.getHeaders().put(HttpHeader.CONTENT_TYPE,
@@ -750,10 +797,9 @@ public class HttpBinHandler extends Handler.Abstract {
         }
     }
 
-    private static JSONObject mapHeadersToJSON(Request request) {
+    private static JSONObject mapFieldsToJSON(HttpFields fields) {
         JSONObject headers = new JSONObject();
 
-        HttpFields fields = request.getHeaders();
         for (String name : fields.getFieldNamesCollection()) {
             List<String> values = fields.getValuesList(name);
             if (values.size() == 1) {
@@ -781,8 +827,53 @@ public class HttpBinHandler extends Handler.Abstract {
         return headers;
     }
 
+    /**
+     * Reports the URL the client used, as far as the proxy headers say.
+     *
+     * @param request request to report
+     * @return the request URL, with any forwarded scheme applied
+     */
     private static String getFullURL(Request request) {
-        return request.getHttpURI().asString();
+        HttpFields fields = request.getHeaders();
+        String scheme = fields.get("X-Forwarded-Proto");
+        if (scheme == null) {
+            scheme = fields.get("X-Forwarded-Protocol");
+        }
+        if (scheme == null && "on".equals(fields.get("X-Forwarded-Ssl"))) {
+            scheme = "https";
+        }
+        HttpURI uri = request.getHttpURI();
+        return scheme == null ? uri.asString() :
+                HttpURI.build(uri).scheme(scheme).asString();
+    }
+
+    /**
+     * Splits a header that may carry a comma separated list of entity tags.
+     *
+     * <p>Mirrors upstream's parse_multi_value_header, which drops the quotes
+     * around each tag and any weak validator prefix, so that abc, "abc" and
+     * W/"abc" all name the same one.
+     *
+     * @param header header value, may be null
+     * @return the tags the header names, empty when it names none
+     */
+    private static List<String> parseMultiValueHeader(String header) {
+        List<String> values = new ArrayList<>();
+        if (header == null || header.isEmpty()) {
+            return values;
+        }
+        for (String part : header.split(",")) {
+            String value = part.strip();
+            if (value.startsWith("W/")) {
+                value = value.substring("W/".length());
+            }
+            if (value.startsWith("\"")) {
+                value = value.substring(1);
+            }
+            int quote = value.indexOf('"');
+            values.add(quote < 0 ? value : value.substring(0, quote));
+        }
+        return values;
     }
 
     /**

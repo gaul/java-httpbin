@@ -93,24 +93,6 @@ XFAIL = {
     "test_set_cors_headers_with_options_verb":
         "the CORS preflight headers are not sent",
 
-    # Behavior differences on endpoints java-httpbin does serve.
-    "test_anything": "the JSON body does not end in a newline",
-    "test_get": "the JSON body does not end in a newline",
-    "test_delete_endpoint_returns_body":
-        "a urlencoded body is not reported in the form field",
-    "test_etag_if_match_matches_list":
-        "If-Match matches one entity tag rather than a list",
-    "test_etag_if_none_match_matches_list":
-        "If-None-Match matches one entity tag rather than a list",
-    "test_etag_if_none_match_w_prefix":
-        "If-None-Match does not match a W/ weak entity tag",
-    "test_response_headers_multi":
-        "/response-headers sends only the first value of a repeated "
-        "parameter",
-    "test_response_headers_simple": "/response-headers sends no body",
-    "test_x_forwarded_proto":
-        "X-Forwarded-Proto does not change the reported url",
-
     # Upstream asserts its own limitation here: it answers 501 to a chunked
     # request, which java-httpbin accepts.  Upstream carries the assertion it
     # wants next to the one it makes.
