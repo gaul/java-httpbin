@@ -201,7 +201,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 return;
             } else if (method.equals("GET") && uri.equals("/ip")) {
                 JSONObject json = new JSONObject();
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 respondJSON(response, os, json);
                 return;
             } else if (method.equals("GET") && uri.equals("/user-agent")) {
@@ -216,7 +216,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("url", getFullURL(request));
                 json.put("gzipped", true);
 
@@ -243,7 +243,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("url", getFullURL(request));
                 json.put("deflated", true);
 
@@ -274,7 +274,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 // and url that /gzip and /deflate above have long carried.
                 JSONObject json = new JSONObject();
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("method", method);
                 json.put("brotli", true);
 
@@ -302,7 +302,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("url", getFullURL(request));
 
                 respondJSON(response, os, json);
@@ -316,7 +316,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("url", getFullURL(request));
 
                 response.getHeaders().put(HttpHeader.CACHE_CONTROL,
@@ -337,7 +337,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 JSONObject json = new JSONObject();
                 json.put("args", mapParametersToJSON(params));
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("url", getFullURL(request));
 
                 respondJSON(response, os, json);
@@ -408,7 +408,7 @@ public class HttpBinHandler extends Handler.Abstract {
                     JSONObject json = new JSONObject();
                     json.put("args", mapParametersToJSON(params));
                     json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                    json.put("origin", Request.getRemoteAddr(request));
+                    json.put("origin", getOrigin(request));
                     json.put("url", getFullURL(request));
                     json.put("id", i);
 
@@ -492,7 +492,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 json.put("args", mapParametersToJSON(params));
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("url", getFullURL(request));
 
                 respondJSON(response, os, json);
@@ -684,7 +684,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 json.put("method", method);
                 json.put("args", mapParametersToJSON(params));
                 json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                json.put("origin", Request.getRemoteAddr(request));
+                json.put("origin", getOrigin(request));
                 json.put("url", getFullURL(request));
 
                 // Body data
@@ -945,6 +945,23 @@ public class HttpBinHandler extends Handler.Abstract {
         }
 
         return headers;
+    }
+
+    /**
+     * Reports the address the request came from, as far as the proxy header
+     * says.
+     *
+     * <p>Upstream reports X-Forwarded-For whole, chain and all, rather than
+     * picking a hop out of it.
+     *
+     * @param request request to report
+     * @return the forwarded address, or the address that connected
+     */
+    private static String getOrigin(Request request) {
+        String forwarded = request.getHeaders().get(
+                HttpHeader.X_FORWARDED_FOR);
+        return forwarded != null ? forwarded :
+                Request.getRemoteAddr(request);
     }
 
     /**

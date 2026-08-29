@@ -126,6 +126,25 @@ public final class HttpBinTest {
         assertThat(json.getJSONObject("headers")).isNotNull();
     }
 
+    /** Upstream reports the forwarded address whole, chain and all. */
+    @Test
+    public void testOriginFollowsForwardedFor() throws Exception {
+        ContentResponse response = client.GET(httpBinEndpoint + "/ip");
+        assertThat(new JSONObject(response.getContentAsString())
+                .getString("origin")).as("no header").isEqualTo("127.0.0.1");
+
+        for (String path : new String[] {"/ip", "/get", "/anything"}) {
+            response = client.newRequest(httpBinEndpoint + path)
+                    .headers(fields -> fields.put(
+                            HttpHeader.X_FORWARDED_FOR,
+                            "203.0.113.9, 198.51.100.1"))
+                    .send();
+            assertThat(new JSONObject(response.getContentAsString())
+                    .getString("origin")).as(path)
+                    .isEqualTo("203.0.113.9, 198.51.100.1");
+        }
+    }
+
     @Test
     public void testCorsHeaders() throws Exception {
         HttpFields headers = client.GET(httpBinEndpoint + "/get")
