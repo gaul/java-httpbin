@@ -611,6 +611,27 @@ public class HttpBinHandler extends Handler.Abstract {
                         uri.substring("/hidden-basic-auth/".length()),
                         HttpStatus.NOT_FOUND_404);
                 return;
+            } else if (method.equals("GET") && uri.equals("/bearer")) {
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+
+                String header = request.getHeaders().get(
+                        HttpHeader.AUTHORIZATION);
+                // A bare "Bearer" carries no token, so it fails as well.
+                // Upstream reads "Bearer " as an empty token instead, which
+                // no conforming server can tell from the bare one: a field
+                // value arrives with its trailing space already stripped.
+                if (header == null || !header.startsWith("Bearer ")) {
+                    response.getHeaders().put(HttpHeader.WWW_AUTHENTICATE,
+                            "Bearer");
+                    response.setStatus(HttpStatus.UNAUTHORIZED_401);
+                    return;
+                }
+
+                JSONObject json = new JSONObject();
+                json.put("authenticated", true);
+                json.put("token", header.substring("Bearer ".length()));
+                respondJSON(response, os, json);
+                return;
             } else if (uri.startsWith("/anything")) {
                 response.setStatus(HttpStatus.OK_200);
 

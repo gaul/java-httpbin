@@ -49,6 +49,7 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/deny` Denied by robots.txt file.
 - `/basic-auth/:user/:passwd` Challenges HTTP Basic Auth.
 - `/hidden-basic-auth/:user/:passwd` Challenges HTTP Basic Auth and returns 404 on failure.
+- `/bearer` Challenges HTTP Bearer Auth and returns the token.
 - `/html` Returns some HTML.
 - `/xml` Returns some XML.
 - `/image/png` Returns page containing a PNG image.

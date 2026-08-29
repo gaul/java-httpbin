@@ -69,10 +69,6 @@ SKIP = {
 #: the run red until that happens.
 XFAIL = {
     # Endpoints java-httpbin does not serve, which answer 501.
-    "test_bearer_auth": "/bearer is not implemented",
-    "test_bearer_auth_with_missing_token": "/bearer is not implemented",
-    "test_bearer_auth_with_wrong_authorization_type":
-        "/bearer is not implemented",
     "test_brotli": "/brotli is not implemented",
     "test_digest_auth": "/digest-auth is not implemented",
     "test_digest_auth_with_wrong_authorization_type":
@@ -214,7 +210,11 @@ class _Client:
         if unsupported:
             raise TypeError("upstream now passes %s, which this client does "
                             "not translate" % sorted(unsupported))
-        headers = dict(headers or {})
+        # An empty header name has no form on the wire.  Upstream's test
+        # client turns one into nothing the application can see, so dropping
+        # it here sends what that test means: no such header.
+        headers = {name: value
+                   for name, value in dict(headers or {}).items() if name}
         if content_type is not None:
             headers["Content-Type"] = content_type
         # _body() may drop a header, so resolve it before the request.
