@@ -28,6 +28,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -66,8 +67,6 @@ public class HttpBinHandler extends Handler.Abstract {
             "image/webp", "image/svg+xml", "image/jpeg", "image/png",
             "image/*");
     private static final int MAX_LINKS = 200;
-    private static final List<String> DELAY_METHODS =
-            List.of("POST", "PUT", "DELETE", "PATCH", "TRACE");
     private static final String BASIC_REALM = "Basic realm=\"Fake Realm\"";
     // Upstream's own words, and part of what a client sees from it.
     private static final String PAYMENT_REQUIRED = "Fuck you, pay me!";
@@ -99,13 +98,8 @@ public class HttpBinHandler extends Handler.Abstract {
     // The keys that only a request body can answer.
     private static final List<String> BODY_KEYS =
             List.of("form", "files", "data", "json");
-    // What OPTIONS reports it answers.  Upstream names one method per route
-    // because Flask knows its routes; this handler dispatches on a chain of
-    // comparisons, so it reports the same set everywhere.
-    private static final String ALLOWED_METHODS =
-            "GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS";
     // What a preflight is told it may use, which upstream fixes without
-    // HEAD whatever the route.
+    // HEAD whatever the route Allow names.
     private static final String ACCESS_CONTROL_METHODS =
             "GET, POST, PUT, DELETE, PATCH, OPTIONS";
     // Buffer parts in memory instead of spilling them to temporary files,
@@ -149,7 +143,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 prefix.substring(0, prefix.length() - 1) : prefix;
         // Requests are matched against the raw path, so a prefix that Jetty
         // would only produce after decoding could never match.  Rejecting it
-        // beats serving nothing but 501.
+        // beats serving nothing but 404.
         for (String segment : normalized.substring(1).split("/", -1)) {
             if (segment.isEmpty() || segment.equals(".") ||
                     segment.equals("..")) {
@@ -169,6 +163,126 @@ public class HttpBinHandler extends Handler.Abstract {
 
     public String getPrefix() {
         return prefix;
+    }
+
+    /** Whether a route names a path exactly or the start of one. */
+    private enum Match {
+        EXACT, PREFIX
+    }
+
+    /**
+     * The paths this server serves, and the methods each of them answers.
+     *
+     * <p>Declaring them is what lets a path none of them names answer 404,
+     * and a method the one that matched does not answer 405 naming the ones
+     * it does.  Order is match order, so a route another would also match
+     * comes first, as /cookies/set does before /cookies/set/.
+     */
+    private enum Route {
+        HOME("/", Match.EXACT, "GET"),
+        STATUS("/status/", Match.PREFIX,
+                "GET", "POST", "PUT", "DELETE", "PATCH",
+                "TRACE"),
+        HEADERS("/headers", Match.EXACT, "GET"),
+        IP("/ip", Match.EXACT, "GET"),
+        UUID("/uuid", Match.EXACT, "GET"),
+        USER_AGENT("/user-agent", Match.EXACT, "GET"),
+        GZIP("/gzip", Match.EXACT, "GET"),
+        DEFLATE("/deflate", Match.EXACT, "GET"),
+        BROTLI("/brotli", Match.EXACT, "GET"),
+        CACHE("/cache", Match.EXACT, "GET"),
+        CACHE_SECONDS("/cache/", Match.PREFIX, "GET"),
+        DELAY("/delay/", Match.PREFIX,
+                "GET", "POST", "PUT", "DELETE", "PATCH",
+                "TRACE"),
+        ETAG("/etag/", Match.PREFIX, "GET"),
+        DRIP("/drip", Match.EXACT, "GET"),
+        STREAM("/stream/", Match.PREFIX, "GET"),
+        STREAM_BYTES("/stream-bytes/", Match.PREFIX, "GET"),
+        GET("/get", Match.EXACT, "GET"),
+        DELETE("/delete", Match.EXACT, "DELETE"),
+        PATCH("/patch", Match.EXACT, "PATCH"),
+        POST("/post", Match.EXACT, "POST"),
+        PUT("/put", Match.EXACT, "PUT"),
+        LINKS("/links/", Match.PREFIX, "GET"),
+        REDIRECT_TO("/redirect-to", Match.EXACT,
+                "GET", "POST", "PUT", "DELETE", "PATCH",
+                "TRACE"),
+        REDIRECT("/redirect/", Match.PREFIX, "GET"),
+        RELATIVE_REDIRECT("/relative-redirect/", Match.PREFIX, "GET"),
+        ABSOLUTE_REDIRECT("/absolute-redirect/", Match.PREFIX, "GET"),
+        RESPONSE_HEADERS("/response-headers", Match.EXACT, "GET", "POST"),
+        COOKIES("/cookies", Match.EXACT, "GET"),
+        COOKIES_SET("/cookies/set", Match.EXACT, "GET"),
+        COOKIES_SET_PATH("/cookies/set/", Match.PREFIX, "GET"),
+        COOKIES_DELETE("/cookies/delete", Match.EXACT, "GET"),
+        BASIC_AUTH("/basic-auth/", Match.PREFIX, "GET"),
+        HIDDEN_BASIC_AUTH("/hidden-basic-auth/", Match.PREFIX, "GET"),
+        DIGEST_AUTH("/digest-auth/", Match.PREFIX, "GET"),
+        BEARER("/bearer", Match.EXACT, "GET"),
+        ANYTHING("/anything", Match.EXACT,
+                "GET", "POST", "PUT", "DELETE", "PATCH",
+                "TRACE"),
+        ANYTHING_PATH("/anything/", Match.PREFIX,
+                "GET", "POST", "PUT", "DELETE", "PATCH",
+                "TRACE"),
+        BYTES("/bytes/", Match.PREFIX, "GET"),
+        BASE64("/base64/", Match.PREFIX, "GET"),
+        RANGE("/range/", Match.PREFIX, "GET"),
+        IMAGE_JPEG("/image/jpeg", Match.EXACT, "GET"),
+        IMAGE_PNG("/image/png", Match.EXACT, "GET"),
+        IMAGE_SVG("/image/svg", Match.EXACT, "GET"),
+        IMAGE_WEBP("/image/webp", Match.EXACT, "GET"),
+        IMAGE("/image", Match.EXACT, "GET"),
+        HTML("/html", Match.EXACT, "GET"),
+        XML("/xml", Match.EXACT, "GET"),
+        JSON("/json", Match.EXACT, "GET"),
+        ENCODING_UTF8("/encoding/utf8", Match.EXACT, "GET"),
+        FORMS_POST("/forms/post", Match.EXACT, "GET"),
+        ROBOTS_TXT("/robots.txt", Match.EXACT, "GET"),
+        DENY("/deny", Match.EXACT, "GET");
+
+        private final String path;
+        private final Match match;
+        private final Set<String> methods;
+        private final String allow;
+
+        Route(String path, Match match, String... methods) {
+            this.path = path;
+            this.match = match;
+            this.methods = Set.of(methods);
+            // Whatever a route answers, it answers OPTIONS, and a HEAD
+            // wherever it answers a GET.
+            List<String> allowed = new ArrayList<>();
+            for (String candidate : new String[] {
+                "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "TRACE",
+            }) {
+                if (answers(candidate)) {
+                    allowed.add(candidate);
+                }
+            }
+            allowed.add("OPTIONS");
+            this.allow = String.join(", ", allowed);
+        }
+
+        static Route match(String uri) {
+            for (Route route : values()) {
+                if (route.match == Match.EXACT ? uri.equals(route.path) :
+                        uri.startsWith(route.path)) {
+                    return route;
+                }
+            }
+            return null;
+        }
+
+        boolean answers(String method) {
+            return methods.contains(method) || (method.equals("HEAD") &&
+                    methods.contains("GET"));
+        }
+
+        String allow() {
+            return allow;
+        }
     }
 
     @Override
@@ -195,31 +309,37 @@ public class HttpBinHandler extends Handler.Abstract {
         String method = request.getMethod();
         String uri = stripPrefix(request.getHttpURI().getPath());
         if (uri == null) {
-            response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+            response.setStatus(HttpStatus.NOT_FOUND_404);
             return;
         }
         Fields params = Request.extractQueryParameters(request);
         // A HEAD asks for what a GET would answer without the body, which
         // Jetty leaves off while keeping the Content-Length it would have
         // had, so every route a GET reaches answers one.
-        boolean getOrHead = method.equals("GET") ||
-                method.equals("HEAD");
+        Route route = Route.match(uri);
+        if (route == null) {
+            Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+            response.setStatus(HttpStatus.NOT_FOUND_404);
+            return;
+        }
+        if (method.equals("OPTIONS") || !route.answers(method)) {
+            // A browser discards a preflight that does not succeed, so an
+            // OPTIONS is answered rather than refused; anything else this
+            // route does not answer is refused, naming what it does.
+            Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+            response.getHeaders().put(HttpHeader.ALLOW, route.allow());
+            response.setStatus(method.equals("OPTIONS") ?
+                    HttpStatus.OK_200 : HttpStatus.METHOD_NOT_ALLOWED_405);
+            return;
+        }
+
         try {
-            if (method.equals("OPTIONS")) {
-                // A browser discards a preflight that does not succeed, so
-                // answer one here rather than letting it reach the 501
-                // below.  Upstream answers every route this way as well,
-                // Flask having built the handler that does it.
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                response.getHeaders().put(HttpHeader.ALLOW, ALLOWED_METHODS);
-                response.setStatus(HttpStatus.OK_200);
-                return;
-            } else if (uri.equals("/")) {
+            if (route == Route.HOME) {
                 serveResource(response, os,
                         MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
                         "/home.html");
                 return;
-            } else if (uri.startsWith("/status/")) {
+            } else if (route == Route.STATUS) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 int status;
                 try {
@@ -266,7 +386,7 @@ public class HttpBinHandler extends Handler.Abstract {
                     break;
                 }
                 return;
-            } else if (getOrHead && uri.equals("/headers")) {
+            } else if (route == Route.HEADERS) {
                 JSONObject headers = new JSONObject();
                 HttpFields fields = request.getHeaders();
                 for (String headerName : fields.getFieldNamesCollection()) {
@@ -277,24 +397,24 @@ public class HttpBinHandler extends Handler.Abstract {
                 json.put("headers", headers);
                 respondJSON(response, os, json);
                 return;
-            } else if (getOrHead && uri.equals("/ip")) {
+            } else if (route == Route.IP) {
                 JSONObject json = new JSONObject();
                 json.put("origin", getOrigin(request));
                 respondJSON(response, os, json);
                 return;
-            } else if (getOrHead && uri.equals("/uuid")) {
+            } else if (route == Route.UUID) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 JSONObject json = new JSONObject();
                 json.put("uuid", UUID.randomUUID().toString());
                 respondJSON(response, os, json);
                 return;
-            } else if (getOrHead && uri.equals("/user-agent")) {
+            } else if (route == Route.USER_AGENT) {
                 JSONObject json = new JSONObject();
                 json.put("user-agent", request.getHeaders().get(
                         HttpHeader.USER_AGENT));
                 respondJSON(response, os, json);
                 return;
-            } else if (getOrHead && uri.equals("/gzip")) {
+            } else if (route == Route.GZIP) {
                 JSONObject json = describeRequest(request, is, params,
                         "origin", "headers", "method");
                 json.put("gzipped", true);
@@ -316,7 +436,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(compressed);
                 os.flush();
                 return;
-            } else if (getOrHead && uri.equals("/deflate")) {
+            } else if (route == Route.DEFLATE) {
                 JSONObject json = describeRequest(request, is, params,
                         "origin", "headers", "method");
                 json.put("deflated", true);
@@ -341,7 +461,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(compressed);
                 os.flush();
                 return;
-            } else if (getOrHead && uri.equals("/brotli")) {
+            } else if (route == Route.BROTLI) {
                 JSONObject json = describeRequest(request, is, params,
                         "origin", "headers", "method");
                 json.put("brotli", true);
@@ -357,7 +477,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(compressed);
                 os.flush();
                 return;
-            } else if (getOrHead && uri.equals("/cache")) {
+            } else if (route == Route.CACHE) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 HttpFields fields = request.getHeaders();
@@ -374,7 +494,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 respondJSON(response, os, describeRequest(request, is,
                         params, "url", "args", "headers", "origin"));
                 return;
-            } else if (getOrHead && uri.startsWith("/cache/")) {
+            } else if (route == Route.CACHE_SECONDS) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int seconds = Integer.parseInt(uri.substring(
@@ -387,8 +507,7 @@ public class HttpBinHandler extends Handler.Abstract {
                         "public, max-age=" + seconds);
                 respondJSON(response, os, json);
                 return;
-            } else if (uri.startsWith("/delay/") && (getOrHead ||
-                    DELAY_METHODS.contains(method))) {
+            } else if (route == Route.DELAY) {
                 int delayMs = (int) (1000 * Double.parseDouble(uri.substring(
                         "/delay/".length())));
                 try {
@@ -401,7 +520,7 @@ public class HttpBinHandler extends Handler.Abstract {
                         "url", "args", "form", "data", "origin", "headers",
                         "files"));
                 return;
-            } else if (getOrHead && uri.startsWith("/etag/")) {
+            } else if (route == Route.ETAG) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 String eTag = uri.substring("/etag/".length());
@@ -430,7 +549,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 respondJSON(response, os, describeRequest(request, is, params,
                         "url", "args", "headers", "origin"));
                 return;
-            } else if (getOrHead && uri.equals("/drip")) {
+            } else if (route == Route.DRIP) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 long durationMs = (long) (1000 * Utils.getDoubleParameter(
@@ -455,7 +574,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if (getOrHead && uri.startsWith("/stream/")) {
+            } else if (route == Route.STREAM) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int responses = Integer.parseInt(uri.substring(
@@ -483,8 +602,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if (getOrHead && uri.startsWith(
-                    "/stream-bytes/")) {
+            } else if (route == Route.STREAM_BYTES) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 long numBytes = Long.parseLong(uri.substring(
@@ -508,20 +626,18 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if (getOrHead && uri.equals("/get")) {
+            } else if (route == Route.GET) {
                 // Upstream reports no body here, the route taking none.
                 respondJSON(response, os, describeRequest(request, is, params,
                         "url", "args", "headers", "origin"));
                 return;
-            } else if ((method.equals("DELETE") && uri.equals("/delete")) ||
-                    (method.equals("PATCH") && uri.equals("/patch")) ||
-                    (method.equals("POST") && uri.equals("/post")) ||
-                    (method.equals("PUT") && uri.equals("/put"))) {
+            } else if (route == Route.DELETE || route == Route.PATCH ||
+                    route == Route.POST || route == Route.PUT) {
                 respondJSON(response, os, describeRequest(request, is, params,
                         "url", "args", "form", "data", "origin", "headers",
                         "files", "json"));
                 return;
-            } else if (getOrHead && uri.startsWith("/links/")) {
+            } else if (route == Route.LINKS) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 String[] parts = uri.substring("/links/".length())
                         .split("/", -1);
@@ -532,11 +648,11 @@ public class HttpBinHandler extends Handler.Abstract {
                     offset = parts.length == 1 ? -1 :
                             Integer.parseInt(parts[1]);
                 } catch (NumberFormatException nfe) {
-                    response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+                    response.setStatus(HttpStatus.NOT_FOUND_404);
                     return;
                 }
                 if (parts.length > 2) {
-                    response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+                    response.setStatus(HttpStatus.NOT_FOUND_404);
                     return;
                 }
                 if (parts.length == 1) {
@@ -570,14 +686,14 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(body);
                 os.flush();
                 return;
-            } else if (uri.equals("/redirect-to")) {
+            } else if (route == Route.REDIRECT_TO) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 int statusCode = Utils.getIntParameter(params, "status_code",
                         HttpStatus.MOVED_TEMPORARILY_302);
                 redirectTo(response, params.getValue("url"), statusCode);
                 return;
-            } else if (uri.startsWith("/redirect/") ||
-                    uri.startsWith("/relative-redirect/")) {
+            } else if (route == Route.REDIRECT ||
+                    route == Route.RELATIVE_REDIRECT) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int count = Integer.parseInt(uri.substring(
@@ -600,7 +716,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if (uri.startsWith("/absolute-redirect/")) {
+            } else if (route == Route.ABSOLUTE_REDIRECT) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 int count = Integer.parseInt(uri.substring(
@@ -618,8 +734,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 }
 
                 return;
-            } else if ((getOrHead || method.equals("POST")) &&
-                    uri.equals("/response-headers")) {
+            } else if (route == Route.RESPONSE_HEADERS) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 // Collect the headers separately from the response, which
                 // already carries the Date and Server that the transport
@@ -653,7 +768,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(body);
                 os.flush();
                 return;
-            } else if (uri.equals("/cookies")) {
+            } else if (route == Route.COOKIES) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 JSONObject cookies = new JSONObject();
@@ -667,7 +782,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 respondJSON(response, os, json);
                 return;
-            } else if (uri.equals("/cookies/set")) {
+            } else if (route == Route.COOKIES_SET) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 for (String name : params.getNames()) {
@@ -678,7 +793,7 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 redirectTo(response, prefix + "/cookies");
                 return;
-            } else if (uri.startsWith("/cookies/set/")) {
+            } else if (route == Route.COOKIES_SET_PATH) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 // /cookies/set/name/value names one cookie in the path
@@ -689,14 +804,14 @@ public class HttpBinHandler extends Handler.Abstract {
                 // empty value, so neither names a cookie to set here.
                 if (cookie.length != 2 || cookie[0].isEmpty() ||
                         cookie[1].isEmpty()) {
-                    response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+                    response.setStatus(HttpStatus.NOT_FOUND_404);
                     return;
                 }
                 setCookie(response, cookie[0], cookie[1]);
 
                 redirectTo(response, prefix + "/cookies");
                 return;
-            } else if (uri.equals("/cookies/delete")) {
+            } else if (route == Route.COOKIES_DELETE) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 for (String name : params.getNames()) {
@@ -710,24 +825,24 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 redirectTo(response, prefix + "/cookies");
                 return;
-            } else if (uri.startsWith("/basic-auth/")) {
+            } else if (route == Route.BASIC_AUTH) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 handleBasicAuth(request, response, os,
                         uri.substring("/basic-auth/".length()),
                         HttpStatus.UNAUTHORIZED_401);
                 return;
-            } else if (uri.startsWith("/hidden-basic-auth/")) {
+            } else if (route == Route.HIDDEN_BASIC_AUTH) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 handleBasicAuth(request, response, os,
                         uri.substring("/hidden-basic-auth/".length()),
                         HttpStatus.NOT_FOUND_404);
                 return;
-            } else if (uri.startsWith("/digest-auth/")) {
+            } else if (route == Route.DIGEST_AUTH) {
                 DigestAuth.handle(request, response, is, os,
                         uri.substring("/digest-auth/".length()), params,
                         cookiePath);
                 return;
-            } else if (getOrHead && uri.equals("/bearer")) {
+            } else if (route == Route.BEARER) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 String header = request.getHeaders().get(
@@ -748,12 +863,13 @@ public class HttpBinHandler extends Handler.Abstract {
                 json.put("token", header.substring("Bearer ".length()));
                 respondJSON(response, os, json);
                 return;
-            } else if (uri.startsWith("/anything")) {
+            } else if (route == Route.ANYTHING ||
+                    route == Route.ANYTHING_PATH) {
                 respondJSON(response, os, describeRequest(request, is, params,
                         "url", "args", "headers", "origin", "method", "form",
                         "data", "files", "json"));
                 return;
-            } else if (getOrHead && uri.startsWith("/bytes/")) {
+            } else if (route == Route.BYTES) {
                 long length = Long.parseLong(uri.substring(
                         "/bytes/".length()));
                 int seed = Utils.getIntParameter(params, "seed", -1);
@@ -773,7 +889,7 @@ public class HttpBinHandler extends Handler.Abstract {
                     i += count;
                 }
                 return;
-            } else if (getOrHead && uri.startsWith("/base64/")) {
+            } else if (route == Route.BASE64) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 byte[] body = Base64.getDecoder().decode(
                         uri.substring("/base64/".length()));
@@ -785,7 +901,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(body);
                 os.flush();
                 return;
-            } else if (getOrHead && uri.startsWith("/range/")) {
+            } else if (route == Route.RANGE) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
 
                 long size = Long.parseLong(uri.substring("/range/".length()));
@@ -836,24 +952,24 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.flush();
 
                 return;
-            } else if (getOrHead && uri.equals("/image/jpeg")) {
+            } else if (route == Route.IMAGE_JPEG) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 serveResource(response, os, "image/jpeg",
                         "/image.jpg");
                 return;
-            } else if (getOrHead && uri.equals("/image/png")) {
+            } else if (route == Route.IMAGE_PNG) {
                 serveResource(response, os, "image/png",
                         "/image.png");
                 return;
-            } else if (getOrHead && uri.equals("/image/svg")) {
+            } else if (route == Route.IMAGE_SVG) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 serveResource(response, os, "image/svg+xml", "/image.svg");
                 return;
-            } else if (getOrHead && uri.equals("/image/webp")) {
+            } else if (route == Route.IMAGE_WEBP) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 serveResource(response, os, "image/webp", "/image.webp");
                 return;
-            } else if (getOrHead && uri.equals("/image")) {
+            } else if (route == Route.IMAGE) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 String accept = request.getHeaders().get(HttpHeader.ACCEPT);
                 // Upstream reads the header rather than negotiating over it,
@@ -874,28 +990,28 @@ public class HttpBinHandler extends Handler.Abstract {
                     respondNotAcceptable(response, os);
                 }
                 return;
-            } else if (getOrHead && uri.equals("/html")) {
+            } else if (route == Route.HTML) {
                 serveResource(response, os,
                         MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
                         "/text.html");
                 return;
-            } else if (getOrHead && uri.equals("/xml")) {
+            } else if (route == Route.XML) {
                 serveResource(response, os, "application/xml",
                         "/text.xml");
                 return;
-            } else if (getOrHead && uri.equals("/json")) {
+            } else if (route == Route.JSON) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 serveResource(response, os,
                         MimeTypes.Type.APPLICATION_JSON.asString(),
                         "/slideshow.json");
                 return;
-            } else if (getOrHead && uri.equals("/encoding/utf8")) {
+            } else if (route == Route.ENCODING_UTF8) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 serveResource(response, os,
                         MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
                         "/utf8.html");
                 return;
-            } else if (getOrHead && uri.equals("/forms/post")) {
+            } else if (route == Route.FORMS_POST) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 // The form posts back to this server, so where it posts to
                 // has to follow the prefix this one is serving beneath.
@@ -911,7 +1027,7 @@ public class HttpBinHandler extends Handler.Abstract {
                 os.write(body);
                 os.flush();
                 return;
-            } else if (getOrHead && uri.equals("/robots.txt")) {
+            } else if (route == Route.ROBOTS_TXT) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().put(HttpHeader.CONTENT_TYPE,
@@ -920,7 +1036,7 @@ public class HttpBinHandler extends Handler.Abstract {
                         prefix + "/deny\n").getBytes(
                                 StandardCharsets.UTF_8));
                 return;
-            } else if (getOrHead && uri.equals("/deny")) {
+            } else if (route == Route.DENY) {
                 Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().put(HttpHeader.CONTENT_TYPE,
@@ -929,10 +1045,17 @@ public class HttpBinHandler extends Handler.Abstract {
                         StandardCharsets.UTF_8));
                 return;
             }
+            // Only a route the table names but nothing above serves.
             response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
         } catch (JSONException e) {
             logger.trace("JSONException", e);
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR_500);
+        } catch (NumberFormatException nfe) {
+            // A route takes a number in its path, and this path has
+            // something else there, so it names no route after all.  The
+            // parse comes before anything is written, so the status stands.
+            logger.trace("NumberFormatException", nfe);
+            response.setStatus(HttpStatus.NOT_FOUND_404);
         }
     }
 
@@ -1257,7 +1380,7 @@ public class HttpBinHandler extends Handler.Abstract {
      * <p>This mirrors Jetty's Context.getPathInContext but works on the raw
      * path, which is what the routes above match.  Requests carrying path
      * parameters or dot segments therefore do not match the prefix and fall
-     * through to 501, which fails closed: raw matching is strictly narrower
+     * through to 404, which fails closed: raw matching is strictly narrower
      * than canonical matching, so nothing reaches a route it should not.
      *
      * @param path raw path from the request

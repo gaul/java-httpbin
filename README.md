@@ -71,10 +71,11 @@ than compressing them: the JDK ships no Brotli encoder, and the ones on offer
 bind to a native library that everything depending on this library would then
 have to carry.
 
-Every response carries the CORS headers httpbin sends.  `OPTIONS` answers a
-preflight with the 200 a browser requires before it will send the request
-itself; a preflight names a path the browser has not fetched yet, so any path
-answers one, not only the endpoints above.
+Every response carries the CORS headers httpbin sends, and `OPTIONS` answers a
+preflight for the endpoints above with the 200 a browser requires before it
+will send the request itself.  A path none of them names answers 404, and a
+method one of them does not answer answers 405, naming in `Allow` the methods
+it does.
 
 ## Usage
 
@@ -130,7 +131,7 @@ HttpBin httpBin = new HttpBin(httpBinEndpoint);
 httpBin.start();
 
 // GET /some/other/path/headers returns the headers
-// GET /headers                 returns 501
+// GET /headers                 returns 404
 ```
 
 The executable jar accepts the same URI:
@@ -141,14 +142,14 @@ httpbin http://127.0.0.1:8080/some/other/path
 
 Notes:
 
-- Requests outside the prefix return 501, as unknown paths already do.
+- Requests outside the prefix return 404, as unknown paths already do.
 - The prefix must be a plain path: no percent-encoding, `;`, `?`, `#`, or empty
   or dot segments.  Requests are matched against the raw path, so a prefix
   needing decoding could never match, and an invalid one is rejected outright
   rather than silently serving nothing.
 - For the same reason, a prefixed request carrying path parameters
   (`/some/other/path/get;jsessionid=1`) or dot segments does not match and
-  returns 501.
+  returns 404.
 - `Location` headers this server generates, and the `Path` of cookies it sets,
   carry the prefix.  `/redirect-to?url=` and `/response-headers` echo values the
   caller supplied and are left verbatim, so a caller wanting those prefixed

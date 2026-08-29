@@ -209,7 +209,7 @@ public final class HttpBinTest {
     public void testCorsHeadersOnUnknownPath() throws Exception {
         ContentResponse response = client.GET(
                 httpBinEndpoint + "/nonexistent");
-        assertThat(response.getStatus()).as("status").isEqualTo(501);
+        assertThat(response.getStatus()).as("status").isEqualTo(404);
         assertThat(response.getHeaders().get(
                 HttpHeader.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo("*");
     }
@@ -234,22 +234,52 @@ public final class HttpBinTest {
                 .isEqualTo("3600");
         assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_HEADERS))
                 .isEqualTo("X-Test-Header");
+        // /get answers a GET and what every route answers, and no more.
         assertThat(headers.get(HttpHeader.ALLOW))
-                .isEqualTo("GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS");
+                .isEqualTo("GET, HEAD, OPTIONS");
     }
 
     /**
-     * A preflight names a path the browser has not fetched yet, so answering
-     * only the paths this server serves would need a route table it does not
-     * have.  Every path succeeds instead.
+     * A path whose number does not parse names no route.
+     *
+     * <p>Each of these used to answer an empty 200: the parse threw after
+     * the response had been committed, so nothing could say otherwise.
      */
     @Test
-    public void testOptionsSucceedsForAnyPath() throws Exception {
+    public void testUnparseablePathIsNotFound() throws Exception {
+        for (String path : new String[] {
+            "/bytes/abc", "/cache/abc", "/redirect/abc", "/range/abc",
+            "/links/abc", "/stream/abc", "/absolute-redirect/abc",
+        }) {
+            assertThat(client.GET(httpBinEndpoint + path).getStatus())
+                    .as(path).isEqualTo(404);
+        }
+    }
+
+    /** A method a path does not answer is refused, naming what it does. */
+    @Test
+    public void testMethodNotAllowed() throws Exception {
         ContentResponse response = client.newRequest(
-                httpBinEndpoint + "/nonexistent")
+                httpBinEndpoint + "/get")
+                .method("POST")
+                .body(new StringRequestContent("text/plain", "x"))
+                .send();
+        assertThat(response.getStatus()).as("POST /get").isEqualTo(405);
+        assertThat(response.getHeaders().get(HttpHeader.ALLOW))
+                .isEqualTo("GET, HEAD, OPTIONS");
+
+        response = client.newRequest(httpBinEndpoint + "/post")
                 .method("OPTIONS")
                 .send();
-        assertThat(response.getStatus()).as("status").isEqualTo(200);
+        assertThat(response.getStatus()).as("OPTIONS /post").isEqualTo(200);
+        assertThat(response.getHeaders().get(HttpHeader.ALLOW))
+                .isEqualTo("POST, OPTIONS");
+
+        // A preflight for a path nothing serves is refused like any other.
+        response = client.newRequest(httpBinEndpoint + "/nonexistent")
+                .method("OPTIONS")
+                .send();
+        assertThat(response.getStatus()).as("OPTIONS unknown").isEqualTo(404);
     }
 
     /**

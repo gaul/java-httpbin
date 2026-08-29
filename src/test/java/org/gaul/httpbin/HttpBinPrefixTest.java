@@ -111,8 +111,8 @@ public final class HttpBinPrefixTest {
 
     @Test
     public void testRootIsNotServed() throws Exception {
-        assertThat(client.GET(base + "/get").getStatus()).isEqualTo(501);
-        assertThat(client.GET(base + "/headers").getStatus()).isEqualTo(501);
+        assertThat(client.GET(base + "/get").getStatus()).isEqualTo(404);
+        assertThat(client.GET(base + "/headers").getStatus()).isEqualTo(404);
     }
 
     @Test
@@ -238,19 +238,19 @@ public final class HttpBinPrefixTest {
         assertThat(rawStatus(PREFIX + "/get")).isEqualTo(200);
         assertThat(rawStatus(PREFIX)).isEqualTo(200);
         assertThat(rawStatus(PREFIX + "/")).isEqualTo(200);
-        assertThat(rawStatus(PREFIX + "foo")).isEqualTo(501);
-        assertThat(rawStatus("/some/other/pat")).isEqualTo(501);
-        assertThat(rawStatus("/get")).isEqualTo(501);
-        assertThat(rawStatus("/SOME/OTHER/PATH/get")).isEqualTo(501);
-        assertThat(rawStatus(PREFIX + "/get;jsessionid=1")).isEqualTo(501);
+        assertThat(rawStatus(PREFIX + "foo")).isEqualTo(404);
+        assertThat(rawStatus("/some/other/pat")).isEqualTo(404);
+        assertThat(rawStatus("/get")).isEqualTo(404);
+        assertThat(rawStatus("/SOME/OTHER/PATH/get")).isEqualTo(404);
+        assertThat(rawStatus(PREFIX + "/get;jsessionid=1")).isEqualTo(404);
         assertThat(rawStatus(PREFIX + "/.." + PREFIX + "/get"))
-                .isEqualTo(501);
-        assertThat(rawStatus(PREFIX + "/.")).isEqualTo(501);
-        assertThat(rawStatus(PREFIX + "/..")).isEqualTo(501);
+                .isEqualTo(404);
+        assertThat(rawStatus(PREFIX + "/.")).isEqualTo(404);
+        assertThat(rawStatus(PREFIX + "/..")).isEqualTo(404);
         // Jetty rejects an empty segment before the handler sees it.
         assertThat(rawStatus(PREFIX + "//get")).isEqualTo(400);
-        // Asterisk-form is only legal for OPTIONS.
-        assertThat(rawStatus("OPTIONS", "*")).isEqualTo(501);
+        // Asterisk-form is only legal for OPTIONS, and names no path here.
+        assertThat(rawStatus("OPTIONS", "*")).isEqualTo(404);
     }
 
     private String location(String path) throws Exception {

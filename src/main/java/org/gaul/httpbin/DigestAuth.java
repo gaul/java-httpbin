@@ -87,7 +87,8 @@ final class DigestAuth {
 
         String[] parts = suffix.split("/", -1);
         if (parts.length < 3 || parts.length > 5) {
-            response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+            // The path is beneath /digest-auth but names none of its routes.
+            response.setStatus(HttpStatus.NOT_FOUND_404);
             return;
         }
         String user = parts[1];
