@@ -54,6 +54,11 @@ Java httpbin supports a subset of httpbin endpoints:
 - `/image/png` Returns page containing a PNG image.
 - `/image/jpeg` Returns page containing a JPEG image.
 
+Every response carries the CORS headers httpbin sends.  `OPTIONS` answers a
+preflight with the 200 a browser requires before it will send the request
+itself; a preflight names a path the browser has not fetched yet, so any path
+answers one, not only the endpoints above.
+
 ## Usage
 
 First add dependency to `pom.xml`:

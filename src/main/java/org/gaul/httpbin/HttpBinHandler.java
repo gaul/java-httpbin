@@ -59,6 +59,12 @@ public class HttpBinHandler extends Handler.Abstract {
     private static final Logger logger = LoggerFactory.getLogger(
             HttpBinHandler.class);
     private static final int MAX_DELAY_MS = 10 * 1000;
+    // The methods this server answers, which OPTIONS reports and a
+    // preflight is told it may use.  Upstream names one method per route in
+    // Allow because Flask knows its routes; this handler dispatches on a
+    // chain of comparisons, so it reports the same set everywhere.
+    private static final String ALLOWED_METHODS =
+            "GET, POST, PUT, DELETE, PATCH, OPTIONS";
     // Buffer parts in memory instead of spilling them to temporary files,
     // matching the previous MultiPartFormInputStream behavior.  Parts remain
     // bounded by the default maximum part and request sizes.
@@ -131,6 +137,7 @@ public class HttpBinHandler extends Handler.Abstract {
             logger.trace("header: {}: {}", headerName,
                     headers.get(headerName));
         }
+        setCorsHeaders(request, response);
         try (InputStream is = Content.Source.asInputStream(request);
              OutputStream os = Response.asBufferedOutputStream(request,
                      response)) {
@@ -150,7 +157,16 @@ public class HttpBinHandler extends Handler.Abstract {
         }
         Fields params = Request.extractQueryParameters(request);
         try {
-            if (uri.equals("/")) {
+            if (method.equals("OPTIONS")) {
+                // A browser discards a preflight that does not succeed, so
+                // answer one here rather than letting it reach the 501
+                // below.  Upstream answers every route this way as well,
+                // Flask having built the handler that does it.
+                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                response.getHeaders().put(HttpHeader.ALLOW, ALLOWED_METHODS);
+                response.setStatus(HttpStatus.OK_200);
+                return;
+            } else if (uri.equals("/")) {
                 response.setStatus(HttpStatus.OK_200);
                 response.getHeaders().add(HttpHeader.CONTENT_TYPE,
                         MimeTypes.Type.TEXT_HTML_UTF_8.asString());
@@ -747,6 +763,36 @@ public class HttpBinHandler extends Handler.Abstract {
         } catch (JSONException e) {
             logger.trace("JSONException", e);
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR_500);
+        }
+    }
+
+    /**
+     * Answers a request with the CORS headers httpbin sends.
+     *
+     * <p>Upstream sets these from an after_request hook, so they reach error
+     * responses too, and the preflight ones follow the request method rather
+     * than whether any route matched.
+     *
+     * @param request request being answered
+     * @param response response to carry the headers
+     */
+    private static void setCorsHeaders(Request request, Response response) {
+        HttpFields fields = request.getHeaders();
+        HttpFields.Mutable headers = response.getHeaders();
+        String origin = fields.get(HttpHeader.ORIGIN);
+        headers.put(HttpHeader.ACCESS_CONTROL_ALLOW_ORIGIN,
+                origin != null ? origin : "*");
+        headers.put(HttpHeader.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+
+        if (!request.getMethod().equals("OPTIONS")) {
+            return;
+        }
+        headers.put(HttpHeader.ACCESS_CONTROL_ALLOW_METHODS, ALLOWED_METHODS);
+        headers.put(HttpHeader.ACCESS_CONTROL_MAX_AGE, "3600");
+        String requested = fields.get(
+                HttpHeader.ACCESS_CONTROL_REQUEST_HEADERS);
+        if (requested != null) {
+            headers.put(HttpHeader.ACCESS_CONTROL_ALLOW_HEADERS, requested);
         }
     }
 

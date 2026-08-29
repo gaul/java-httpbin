@@ -81,18 +81,6 @@ XFAIL = {
         "/digest-auth is not implemented",
     "test_digest_auth_wrong_pass": "/digest-auth is not implemented",
 
-    # Upstream answers every request with CORS headers.
-    "test_set_cors_allow_headers":
-        "Access-Control-Allow-Headers is not sent",
-    "test_set_cors_credentials_headers_after_auth_request":
-        "Access-Control-Allow-Credentials is not sent",
-    "test_set_cors_headers_after_request":
-        "Access-Control-Allow-Origin is not sent",
-    "test_set_cors_headers_after_request_with_request_origin":
-        "Access-Control-Allow-Origin is not sent",
-    "test_set_cors_headers_with_options_verb":
-        "the CORS preflight headers are not sent",
-
     # Upstream asserts its own limitation here: it answers 501 to a chunked
     # request, which java-httpbin accepts.  Upstream carries the assertion it
     # wants next to the one it makes.

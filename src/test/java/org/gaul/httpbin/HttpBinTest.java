@@ -25,6 +25,8 @@ import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.MultiPartRequestContent;
 import org.eclipse.jetty.client.StringRequestContent;
+import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.MultiPart;
 import org.json.JSONObject;
 import org.junit.After;
@@ -99,6 +101,75 @@ public final class HttpBinTest {
         assertThat(response.getStatus()).as("status").isEqualTo(200);
         JSONObject object = new JSONObject(response.getContentAsString());
         assertThat(object.getJSONObject("form").similar(input)).isTrue();
+    }
+
+    @Test
+    public void testCorsHeaders() throws Exception {
+        HttpFields headers = client.GET(httpBinEndpoint + "/get")
+                .getHeaders();
+        assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_ORIGIN))
+                .isEqualTo("*");
+        assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_CREDENTIALS))
+                .isEqualTo("true");
+        // Only a preflight asks about these.
+        assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_METHODS))
+                .isNull();
+
+        headers = client.newRequest(httpBinEndpoint + "/get")
+                .headers(fields -> fields.put(HttpHeader.ORIGIN,
+                        "https://example.com"))
+                .send()
+                .getHeaders();
+        assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_ORIGIN))
+                .isEqualTo("https://example.com");
+    }
+
+    /** Upstream's hook reaches error responses, so this one does too. */
+    @Test
+    public void testCorsHeadersOnUnknownPath() throws Exception {
+        ContentResponse response = client.GET(
+                httpBinEndpoint + "/nonexistent");
+        assertThat(response.getStatus()).as("status").isEqualTo(501);
+        assertThat(response.getHeaders().get(
+                HttpHeader.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo("*");
+    }
+
+    @Test
+    public void testOptionsAnswersPreflight() throws Exception {
+        ContentResponse response = client.newRequest(
+                httpBinEndpoint + "/get")
+                .method("OPTIONS")
+                .headers(fields -> fields.put(
+                        HttpHeader.ACCESS_CONTROL_REQUEST_HEADERS,
+                        "X-Test-Header"))
+                .send();
+        // A browser discards a preflight that does not succeed.
+        assertThat(response.getStatus()).as("status").isEqualTo(200);
+        assertThat(response.getContent()).isEmpty();
+
+        HttpFields headers = response.getHeaders();
+        assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_METHODS))
+                .isEqualTo("GET, POST, PUT, DELETE, PATCH, OPTIONS");
+        assertThat(headers.get(HttpHeader.ACCESS_CONTROL_MAX_AGE))
+                .isEqualTo("3600");
+        assertThat(headers.get(HttpHeader.ACCESS_CONTROL_ALLOW_HEADERS))
+                .isEqualTo("X-Test-Header");
+        assertThat(headers.get(HttpHeader.ALLOW))
+                .isEqualTo("GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    }
+
+    /**
+     * A preflight names a path the browser has not fetched yet, so answering
+     * only the paths this server serves would need a route table it does not
+     * have.  Every path succeeds instead.
+     */
+    @Test
+    public void testOptionsSucceedsForAnyPath() throws Exception {
+        ContentResponse response = client.newRequest(
+                httpBinEndpoint + "/nonexistent")
+                .method("OPTIONS")
+                .send();
+        assertThat(response.getStatus()).as("status").isEqualTo(200);
     }
 
     @Test
