@@ -67,6 +67,7 @@ public class HttpBinHandler extends Handler.Abstract {
             "image/webp", "image/svg+xml", "image/jpeg", "image/png",
             "image/*");
     private static final int MAX_LINKS = 200;
+    private static final int MAX_STREAM = 100;
     // What a proxy or the platform underneath adds, which says more about
     // where a server runs than about the request that reached it.  Upstream
     // reports these only when the query names show_env.
@@ -592,29 +593,26 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 return;
             } else if (route == Route.STREAM) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
+                // Upstream streams as fast as it can write and stops at a
+                // hundred lines, so asking for more is not a way to make a
+                // server spend a long time answering.
+                int responses = Math.min(Integer.parseInt(uri.substring(
+                        "/stream/".length())), MAX_STREAM);
 
-                int responses = Integer.parseInt(uri.substring(
-                        "/stream/".length()));
-
+                // The lines differ only in their id, so the rest is read
+                // once, before the first of them goes out.
+                JSONObject json = describeRequest(request, is, params,
+                        "url", "args", "headers", "origin");
                 response.getHeaders().put(HttpHeader.CONTENT_TYPE,
                         MimeTypes.Type.APPLICATION_JSON.asString());
                 response.setStatus(HttpStatus.OK_200);
 
                 for (int i = 0; i < responses; ++i) {
-                    Utils.sleepUninterruptibly(1, TimeUnit.SECONDS);
-
-                    JSONObject json = new JSONObject();
-                    json.put("args", mapParametersToJSON(params));
-                    json.put("headers", mapFieldsToJSON(request.getHeaders()));
-                    json.put("origin", getOrigin(request));
-                    json.put("url", getFullURL(request));
                     json.put("id", i);
-
-                    byte[] body = json.toString().getBytes(
-                            StandardCharsets.UTF_8);
-                    os.write(body);
+                    os.write(json.toString().getBytes(
+                            StandardCharsets.UTF_8));
                     os.write('\n');
+                    // A line a client cannot read yet is not streamed.
                     os.flush();
                 }
 

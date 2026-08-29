@@ -24,6 +24,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import org.brotli.dec.BrotliInputStream;
 import org.eclipse.jetty.client.ContentResponse;
@@ -407,6 +408,26 @@ public final class HttpBinTest {
                     .send();
             assertThat(response.getStatus()).as(method).isEqualTo(200);
         }
+    }
+
+    /** Upstream streams as fast as it can write, and stops at a hundred. */
+    @Test
+    public void testStream() throws Exception {
+        long started = System.nanoTime();
+        ContentResponse response = client.GET(httpBinEndpoint + "/stream/5");
+        assertThat(response.getStatus()).as("status").isEqualTo(200);
+        String[] lines = response.getContentAsString().split("\n");
+        assertThat(lines).hasSize(5);
+        for (int i = 0; i < lines.length; ++i) {
+            assertThat(new JSONObject(lines[i]).getInt("id")).as("line %d", i)
+                    .isEqualTo(i);
+        }
+        // This used to sleep a second between lines.
+        assertThat(System.nanoTime() - started).as("elapsed")
+                .isLessThan(TimeUnit.SECONDS.toNanos(2));
+
+        assertThat(client.GET(httpBinEndpoint + "/stream/150")
+                .getContentAsString().split("\n")).hasSize(100);
     }
 
     /**
