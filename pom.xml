@@ -329,7 +329,7 @@
            binding; the assembly puts this back into the executable jar. -->
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.6.1</version>
+      <version>1.6.3</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
