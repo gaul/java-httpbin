@@ -67,6 +67,19 @@ public class HttpBinHandler extends Handler.Abstract {
             "image/webp", "image/svg+xml", "image/jpeg", "image/png",
             "image/*");
     private static final int MAX_LINKS = 200;
+    // What a proxy or the platform underneath adds, which says more about
+    // where a server runs than about the request that reached it.  Upstream
+    // reports these only when the query names show_env.
+    private static final Set<String> ENV_HEADERS = Set.of(
+            "connect-time", "total-route-time", "via", "x-forwarded-for",
+            "x-forwarded-port", "x-forwarded-proto", "x-forwarded-protocol",
+            "x-forwarded-ssl", "x-heroku-dynos-in-use",
+            "x-heroku-queue-depth", "x-heroku-queue-wait-time", "x-real-ip",
+            "x-request-id", "x-request-start", "x-varnish");
+    private static final Set<String> ENV_COOKIES = Set.of(
+            "__utma", "__utmb", "__utmz", "_gauges_unique",
+            "_gauges_unique_day", "_gauges_unique_hour",
+            "_gauges_unique_month", "_gauges_unique_year");
     private static final String BASIC_REALM = "Basic realm=\"Fake Realm\"";
     // Upstream's own words, and part of what a client sees from it.
     private static final String PAYMENT_REQUIRED = "Fuck you, pay me!";
@@ -389,8 +402,12 @@ public class HttpBinHandler extends Handler.Abstract {
             } else if (route == Route.HEADERS) {
                 JSONObject headers = new JSONObject();
                 HttpFields fields = request.getHeaders();
+                boolean showEnv = showEnv(params);
                 for (String headerName : fields.getFieldNamesCollection()) {
-                    headers.put(headerName, fields.get(headerName));
+                    if (showEnv || !ENV_HEADERS.contains(
+                            headerName.toLowerCase(Locale.ROOT))) {
+                        headers.put(headerName, fields.get(headerName));
+                    }
                 }
 
                 JSONObject json = new JSONObject();
@@ -773,8 +790,12 @@ public class HttpBinHandler extends Handler.Abstract {
 
                 JSONObject cookies = new JSONObject();
 
+                boolean showEnv = showEnv(params);
                 for (HttpCookie cookie : Request.getCookies(request)) {
-                    cookies.put(cookie.getName(), cookie.getValue());
+                    if (showEnv || !ENV_COOKIES.contains(
+                            cookie.getName().toLowerCase(Locale.ROOT))) {
+                        cookies.put(cookie.getName(), cookie.getValue());
+                    }
                 }
 
                 JSONObject json = new JSONObject();
@@ -1265,7 +1286,8 @@ public class HttpBinHandler extends Handler.Abstract {
             json.put(key, switch (key) {
             case "url" -> getFullURL(request);
             case "args" -> mapParametersToJSON(params);
-            case "headers" -> mapFieldsToJSON(request.getHeaders());
+            case "headers" -> hideEnv(mapFieldsToJSON(
+                    request.getHeaders()), ENV_HEADERS, params);
             case "origin" -> getOrigin(request);
             case "method" -> request.getMethod();
             case "form" -> body.form();
@@ -1274,6 +1296,32 @@ public class HttpBinHandler extends Handler.Abstract {
             case "json" -> body.json();
             default -> throw new IllegalArgumentException(key);
             });
+        }
+        return json;
+    }
+
+    /** Whether the query asks for the headers upstream would hide. */
+    private static boolean showEnv(Fields params) {
+        return params.get("show_env") != null;
+    }
+
+    /**
+     * Drops the names upstream hides, unless the query asks to see them.
+     *
+     * @param json names and values to filter
+     * @param hidden names to drop, in lower case
+     * @param params query parameters, which may name show_env
+     * @return the same object, filtered
+     */
+    private static JSONObject hideEnv(JSONObject json, Set<String> hidden,
+            Fields params) {
+        if (showEnv(params)) {
+            return json;
+        }
+        for (String name : new ArrayList<>(json.keySet())) {
+            if (hidden.contains(name.toLowerCase(Locale.ROOT))) {
+                json.remove(name);
+            }
         }
         return json;
     }

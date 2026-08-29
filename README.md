@@ -71,6 +71,10 @@ than compressing them: the JDK ships no Brotli encoder, and the ones on offer
 bind to a native library that everything depending on this library would then
 have to carry.
 
+The headers a proxy adds, and the analytics cookies httpbin knows about, are
+left out of what the endpoints above report about a request; `?show_env`
+includes them.
+
 Every response carries the CORS headers httpbin sends, and `OPTIONS` answers a
 preflight for the endpoints above with the 200 a browser requires before it
 will send the request itself.  A path none of them names answers 404, and a

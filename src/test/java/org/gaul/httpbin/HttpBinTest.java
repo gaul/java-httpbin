@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import java.util.UUID;
 
 import org.brotli.dec.BrotliInputStream;
@@ -406,6 +407,44 @@ public final class HttpBinTest {
                     .send();
             assertThat(response.getStatus()).as(method).isEqualTo(200);
         }
+    }
+
+    /**
+     * Headers a proxy adds say more about where a server runs than about
+     * the request, so upstream leaves them out unless asked.
+     */
+    @Test
+    public void testProxyHeadersAreHidden() throws Exception {
+        for (String path : new String[] {"/headers", "/get", "/anything"}) {
+            assertThat(reportedHeaders(path)).as(path)
+                    .doesNotContain("X-Forwarded-For", "Via", "X-Request-Id",
+                            "X-Real-Ip", "Connect-Time")
+                    .contains("X-Kept");
+            assertThat(reportedHeaders(path + "?show_env=1")).as(path)
+                    .contains("X-Forwarded-For", "Via", "X-Kept");
+        }
+
+        // Hiding follows the name, whatever case it arrives in.
+        ContentResponse response = client.newRequest(
+                httpBinEndpoint + "/headers")
+                .headers(fields -> fields.put("via", "proxy"))
+                .send();
+        assertThat(new JSONObject(response.getContentAsString())
+                .getJSONObject("headers").keySet()).doesNotContain("via");
+    }
+
+    private Set<String> reportedHeaders(String path) throws Exception {
+        ContentResponse response = client.newRequest(httpBinEndpoint + path)
+                .headers(fields -> fields
+                        .put("X-Forwarded-For", "1.2.3.4")
+                        .put("Via", "proxy")
+                        .put("X-Request-Id", "id")
+                        .put("X-Real-Ip", "5.6.7.8")
+                        .put("Connect-Time", "1")
+                        .put("X-Kept", "keep"))
+                .send();
+        return new JSONObject(response.getContentAsString())
+                .getJSONObject("headers").keySet();
     }
 
     @Test
