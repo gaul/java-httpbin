@@ -25,8 +25,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -126,6 +129,8 @@ public class HttpBinHandler extends Handler.Abstract {
 
     private final String prefix;
     private final String cookiePath;
+    private final Map<Route, Endpoint> endpoints =
+            new EnumMap<>(Route.class);
 
     public HttpBinHandler() {
         this("");
@@ -143,6 +148,75 @@ public class HttpBinHandler extends Handler.Abstract {
         // origin, but RFC 6265 path matching makes Path=/some/other/path
         // cover /some/other/path/cookies as well as the prefix itself.
         this.cookiePath = this.prefix.isEmpty() ? "/" : this.prefix;
+        addEndpoints();
+    }
+
+    /**
+     * Names the method that answers each route.
+     *
+     * <p>A route left out here would be matched and then answered by
+     * nothing, so this fails at construction rather than serving an empty
+     * response once someone asks for it.
+     */
+    private void addEndpoints() {
+        endpoints.put(Route.HOME, this::home);
+        endpoints.put(Route.STATUS, this::status);
+        endpoints.put(Route.HEADERS, this::headers);
+        endpoints.put(Route.IP, this::ip);
+        endpoints.put(Route.UUID, this::uuid);
+        endpoints.put(Route.USER_AGENT, this::userAgent);
+        endpoints.put(Route.GZIP, this::gzip);
+        endpoints.put(Route.DEFLATE, this::deflate);
+        endpoints.put(Route.BROTLI, this::brotli);
+        endpoints.put(Route.CACHE, this::cache);
+        endpoints.put(Route.CACHE_SECONDS, this::cacheSeconds);
+        endpoints.put(Route.DELAY, this::delay);
+        endpoints.put(Route.ETAG, this::etag);
+        endpoints.put(Route.DRIP, this::drip);
+        endpoints.put(Route.STREAM, this::stream);
+        endpoints.put(Route.STREAM_BYTES, this::streamBytes);
+        endpoints.put(Route.GET, this::get);
+        endpoints.put(Route.DELETE, this::postPutPatchDelete);
+        endpoints.put(Route.PATCH, this::postPutPatchDelete);
+        endpoints.put(Route.POST, this::postPutPatchDelete);
+        endpoints.put(Route.PUT, this::postPutPatchDelete);
+        endpoints.put(Route.LINKS, this::links);
+        endpoints.put(Route.REDIRECT_TO, this::redirectToUrl);
+        endpoints.put(Route.REDIRECT, this::redirect);
+        endpoints.put(Route.RELATIVE_REDIRECT, this::redirect);
+        endpoints.put(Route.ABSOLUTE_REDIRECT, this::absoluteRedirect);
+        endpoints.put(Route.RESPONSE_HEADERS, this::responseHeaders);
+        endpoints.put(Route.COOKIES, this::cookies);
+        endpoints.put(Route.COOKIES_SET, this::setCookies);
+        endpoints.put(Route.COOKIES_SET_PATH, this::setCookieFromPath);
+        endpoints.put(Route.COOKIES_DELETE, this::deleteCookies);
+        endpoints.put(Route.BASIC_AUTH, this::basicAuth);
+        endpoints.put(Route.HIDDEN_BASIC_AUTH, this::hiddenBasicAuth);
+        endpoints.put(Route.DIGEST_AUTH, this::digestAuth);
+        endpoints.put(Route.BEARER, this::bearer);
+        endpoints.put(Route.ANYTHING, this::anything);
+        endpoints.put(Route.ANYTHING_PATH, this::anything);
+        endpoints.put(Route.BYTES, this::bytes);
+        endpoints.put(Route.BASE64, this::base64);
+        endpoints.put(Route.RANGE, this::range);
+        endpoints.put(Route.IMAGE_JPEG, this::imageJpeg);
+        endpoints.put(Route.IMAGE_PNG, this::imagePng);
+        endpoints.put(Route.IMAGE_SVG, this::imageSvg);
+        endpoints.put(Route.IMAGE_WEBP, this::imageWebp);
+        endpoints.put(Route.IMAGE, this::image);
+        endpoints.put(Route.HTML, this::html);
+        endpoints.put(Route.XML, this::xml);
+        endpoints.put(Route.JSON, this::json);
+        endpoints.put(Route.ENCODING_UTF8, this::encodingUtf8);
+        endpoints.put(Route.FORMS_POST, this::formsPost);
+        endpoints.put(Route.ROBOTS_TXT, this::robotsTxt);
+        endpoints.put(Route.DENY, this::deny);
+
+        Set<Route> unanswered = EnumSet.allOf(Route.class);
+        unanswered.removeAll(endpoints.keySet());
+        if (!unanswered.isEmpty()) {
+            throw new AssertionError("no endpoint for " + unanswered);
+        }
     }
 
     static String normalizePrefix(String prefix) {
@@ -177,6 +251,17 @@ public class HttpBinHandler extends Handler.Abstract {
 
     public String getPrefix() {
         return prefix;
+    }
+
+    /** A matched request, and where its answer goes. */
+    private record Exchange(Request request, Response response,
+            InputStream is, OutputStream os, String uri, Fields params) {
+    }
+
+    /** What answers a request once its route has been matched. */
+    @FunctionalInterface
+    private interface Endpoint {
+        void handle(Exchange exchange) throws IOException;
     }
 
     /** Whether a route names a path exactly or the start of one. */
@@ -348,724 +433,8 @@ public class HttpBinHandler extends Handler.Abstract {
         }
 
         try {
-            if (route == Route.HOME) {
-                serveResource(response, os,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
-                        "/home.html");
-                return;
-            } else if (route == Route.STATUS) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                int status;
-                try {
-                    status = Integer.parseInt(uri.substring(
-                            "/status/".length()));
-                } catch (NumberFormatException nfe) {
-                    response.setStatus(HttpStatus.BAD_REQUEST_400);
-                    return;
-                }
-                response.setStatus(status);
-                switch (status) {
-                case HttpStatus.MOVED_PERMANENTLY_301:
-                case HttpStatus.MOVED_TEMPORARILY_302:
-                case HttpStatus.SEE_OTHER_303:
-                case HttpStatus.USE_PROXY_305:
-                case HttpStatus.TEMPORARY_REDIRECT_307:
-                    response.getHeaders().put(HttpHeader.LOCATION,
-                            prefix + "/redirect/1");
-                    break;
-                case HttpStatus.UNAUTHORIZED_401:
-                    response.getHeaders().put(HttpHeader.WWW_AUTHENTICATE,
-                            BASIC_REALM);
-                    break;
-                case HttpStatus.PAYMENT_REQUIRED_402:
-                    response.getHeaders().put("x-more-info",
-                            "http://vimeo.com/22053820");
-                    respondBytes(response, os, PAYMENT_REQUIRED.getBytes(
-                            StandardCharsets.UTF_8));
-                    break;
-                case HttpStatus.NOT_ACCEPTABLE_406:
-                    respondNotAcceptable(response, os);
-                    break;
-                case HttpStatus.PROXY_AUTHENTICATION_REQUIRED_407:
-                    response.getHeaders().put(HttpHeader.PROXY_AUTHENTICATE,
-                            BASIC_REALM);
-                    break;
-                case HttpStatus.IM_A_TEAPOT_418:
-                    response.getHeaders().put("x-more-info",
-                            "http://tools.ietf.org/html/rfc2324");
-                    respondBytes(response, os, TEAPOT.getBytes(
-                            StandardCharsets.UTF_8));
-                    break;
-                default:
-                    break;
-                }
-                return;
-            } else if (route == Route.HEADERS) {
-                JSONObject headers = new JSONObject();
-                HttpFields fields = request.getHeaders();
-                boolean showEnv = showEnv(params);
-                for (String headerName : fields.getFieldNamesCollection()) {
-                    if (showEnv || !ENV_HEADERS.contains(
-                            headerName.toLowerCase(Locale.ROOT))) {
-                        headers.put(headerName, fields.get(headerName));
-                    }
-                }
-
-                JSONObject json = new JSONObject();
-                json.put("headers", headers);
-                respondJSON(response, os, json);
-                return;
-            } else if (route == Route.IP) {
-                JSONObject json = new JSONObject();
-                json.put("origin", getOrigin(request));
-                respondJSON(response, os, json);
-                return;
-            } else if (route == Route.UUID) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                JSONObject json = new JSONObject();
-                json.put("uuid", UUID.randomUUID().toString());
-                respondJSON(response, os, json);
-                return;
-            } else if (route == Route.USER_AGENT) {
-                JSONObject json = new JSONObject();
-                json.put("user-agent", request.getHeaders().get(
-                        HttpHeader.USER_AGENT));
-                respondJSON(response, os, json);
-                return;
-            } else if (route == Route.GZIP) {
-                JSONObject json = describeRequest(request, is, params,
-                        "origin", "headers", "method");
-                json.put("gzipped", true);
-
-                byte[] uncompressed = jsonBody(json);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream(
-                        uncompressed.length);
-                try (GZIPOutputStream gzipos = new GZIPOutputStream(baos)) {
-                    gzipos.write(uncompressed);
-                }
-                byte[] compressed = baos.toByteArray();
-
-                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
-                        compressed.length);
-                response.getHeaders().put(HttpHeader.CONTENT_ENCODING, "gzip");
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.APPLICATION_JSON.asString());
-                response.setStatus(HttpStatus.OK_200);
-                os.write(compressed);
-                os.flush();
-                return;
-            } else if (route == Route.DEFLATE) {
-                JSONObject json = describeRequest(request, is, params,
-                        "origin", "headers", "method");
-                json.put("deflated", true);
-
-                byte[] uncompressed = jsonBody(json);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream(
-                        uncompressed.length);
-                try (DeflaterOutputStream dos = new DeflaterOutputStream(
-                        baos, new Deflater(Deflater.DEFAULT_COMPRESSION,
-                                /*nowrap=*/ true))) {
-                    dos.write(uncompressed);
-                }
-                byte[] compressed = baos.toByteArray();
-
-                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
-                        compressed.length);
-                response.getHeaders().put(HttpHeader.CONTENT_ENCODING,
-                        "deflate");
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.APPLICATION_JSON.asString());
-                response.setStatus(HttpStatus.OK_200);
-                os.write(compressed);
-                os.flush();
-                return;
-            } else if (route == Route.BROTLI) {
-                JSONObject json = describeRequest(request, is, params,
-                        "origin", "headers", "method");
-                json.put("brotli", true);
-
-                byte[] compressed = Brotli.encode(jsonBody(json));
-
-                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
-                        compressed.length);
-                response.getHeaders().put(HttpHeader.CONTENT_ENCODING, "br");
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.APPLICATION_JSON.asString());
-                response.setStatus(HttpStatus.OK_200);
-                os.write(compressed);
-                os.flush();
-                return;
-            } else if (route == Route.CACHE) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                HttpFields fields = request.getHeaders();
-                if (fields.get(HttpHeader.IF_MODIFIED_SINCE) != null ||
-                        fields.get(HttpHeader.IF_NONE_MATCH) != null) {
-                    response.setStatus(HttpStatus.NOT_MODIFIED_304);
-                    return;
-                }
-
-                response.getHeaders().putDate(HttpHeader.LAST_MODIFIED,
-                        System.currentTimeMillis());
-                response.getHeaders().put(HttpHeader.ETAG,
-                        UUID.randomUUID().toString().replace("-", ""));
-                respondJSON(response, os, describeRequest(request, is,
-                        params, "url", "args", "headers", "origin"));
-                return;
-            } else if (route == Route.CACHE_SECONDS) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                int seconds = Integer.parseInt(uri.substring(
-                        "/cache/".length()));
-
-                JSONObject json = describeRequest(request, is, params,
-                        "url", "args", "headers", "origin");
-
-                response.getHeaders().put(HttpHeader.CACHE_CONTROL,
-                        "public, max-age=" + seconds);
-                respondJSON(response, os, json);
-                return;
-            } else if (route == Route.DELAY) {
-                int delayMs = (int) (1000 * Double.parseDouble(uri.substring(
-                        "/delay/".length())));
-                try {
-                    Thread.sleep(Math.min(delayMs, MAX_DELAY_MS));
-                } catch (InterruptedException ie) {
-                    // ignore
-                }
-
-                respondJSON(response, os, describeRequest(request, is, params,
-                        "url", "args", "form", "data", "origin", "headers",
-                        "files"));
-                return;
-            } else if (route == Route.ETAG) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                String eTag = uri.substring("/etag/".length());
-                HttpFields fields = request.getHeaders();
-                List<String> ifNoneMatch = parseMultiValueHeader(
-                        fields.get(HttpHeader.IF_NONE_MATCH));
-                List<String> ifMatch = parseMultiValueHeader(
-                        fields.get(HttpHeader.IF_MATCH));
-
-                // Upstream lets If-None-Match answer on its own when both
-                // arrive, so If-Match only applies without it.
-                if (!ifNoneMatch.isEmpty()) {
-                    if (ifNoneMatch.contains(eTag) ||
-                            ifNoneMatch.contains("*")) {
-                        response.setStatus(HttpStatus.NOT_MODIFIED_304);
-                        response.getHeaders().put(HttpHeader.ETAG, eTag);
-                        return;
-                    }
-                } else if (!ifMatch.isEmpty() && !ifMatch.contains(eTag) &&
-                        !ifMatch.contains("*")) {
-                    response.setStatus(HttpStatus.PRECONDITION_FAILED_412);
-                    return;
-                }
-
-                response.getHeaders().put(HttpHeader.ETAG, eTag);
-                respondJSON(response, os, describeRequest(request, is, params,
-                        "url", "args", "headers", "origin"));
-                return;
-            } else if (route == Route.DRIP) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                long durationMs = (long) (1000 * Utils.getDoubleParameter(
-                        params, "duration", 0.0));
-                int numBytes = Utils.getIntParameter(params, "numbytes", 10);
-                if (numBytes <= 0) {
-                    response.setStatus(HttpStatus.BAD_REQUEST_400);
-                    return;
-                }
-                int code = Utils.getIntParameter(params, "code", 200);
-                int delay = Utils.getIntParameter(params, "delay", 0);
-
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        OCTET_STREAM);
-                response.setStatus(code);
-                Utils.sleepUninterruptibly(delay, TimeUnit.SECONDS);
-
-                for (int i = 0; i < numBytes; ++i) {
-                    Utils.sleepUninterruptibly(durationMs / numBytes,
-                            TimeUnit.MILLISECONDS);
-                    os.write('*');
-                }
-
-                return;
-            } else if (route == Route.STREAM) {
-                // Upstream streams as fast as it can write and stops at a
-                // hundred lines, so asking for more is not a way to make a
-                // server spend a long time answering.
-                int responses = Math.min(Integer.parseInt(uri.substring(
-                        "/stream/".length())), MAX_STREAM);
-
-                // The lines differ only in their id, so the rest is read
-                // once, before the first of them goes out.
-                JSONObject json = describeRequest(request, is, params,
-                        "url", "args", "headers", "origin");
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.APPLICATION_JSON.asString());
-                response.setStatus(HttpStatus.OK_200);
-
-                for (int i = 0; i < responses; ++i) {
-                    json.put("id", i);
-                    os.write(json.toString().getBytes(
-                            StandardCharsets.UTF_8));
-                    os.write('\n');
-                    // A line a client cannot read yet is not streamed.
-                    os.flush();
-                }
-
-                return;
-            } else if (route == Route.STREAM_BYTES) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                long numBytes = Long.parseLong(uri.substring(
-                        "/stream-bytes/".length()));
-
-                int seed = Utils.getIntParameter(params, "seed", -1);
-                int chunkSize = Utils.getIntParameter(params, "chunkSize",
-                        200);
-                byte[] buf = new byte[chunkSize];
-                Random random = seed == -1 ?
-                        ThreadLocalRandom.current() : new Random(seed);
-
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        OCTET_STREAM);
-                response.setStatus(HttpStatus.OK_200);
-
-                for (long i = 0; i < numBytes; i += chunkSize) {
-                    random.nextBytes(buf);
-                    os.write(buf, 0, i + chunkSize > numBytes ?
-                            (int) (numBytes - i) : chunkSize);
-                }
-
-                return;
-            } else if (route == Route.GET) {
-                // Upstream reports no body here, the route taking none.
-                respondJSON(response, os, describeRequest(request, is, params,
-                        "url", "args", "headers", "origin"));
-                return;
-            } else if (route == Route.DELETE || route == Route.PATCH ||
-                    route == Route.POST || route == Route.PUT) {
-                respondJSON(response, os, describeRequest(request, is, params,
-                        "url", "args", "form", "data", "origin", "headers",
-                        "files", "json"));
-                return;
-            } else if (route == Route.LINKS) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                String[] parts = uri.substring("/links/".length())
-                        .split("/", -1);
-                int count;
-                int offset;
-                try {
-                    count = Integer.parseInt(parts[0]);
-                    offset = parts.length == 1 ? -1 :
-                            Integer.parseInt(parts[1]);
-                } catch (NumberFormatException nfe) {
-                    response.setStatus(HttpStatus.NOT_FOUND_404);
-                    return;
-                }
-                if (parts.length > 2) {
-                    response.setStatus(HttpStatus.NOT_FOUND_404);
-                    return;
-                }
-                if (parts.length == 1) {
-                    // Naming no link to leave out lands on the first.
-                    redirectTo(response, prefix + "/links/" + count + "/0");
-                    return;
-                }
-
-                count = Math.min(Math.max(1, count), MAX_LINKS);
-                StringBuilder html = new StringBuilder(
-                        "<html><head><title>Links</title></head><body>");
-                for (int i = 0; i < count; ++i) {
-                    if (i == offset) {
-                        html.append(i).append(" ");
-                    } else {
-                        html.append("<a href=\'").append(prefix)
-                                .append("/links/").append(count).append("/")
-                                .append(i).append("\'>").append(i)
-                                .append("</a> ");
-                    }
-                }
-                html.append("</body></html>");
-
-                byte[] body = html.toString().getBytes(
-                        StandardCharsets.UTF_8);
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
-                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
-                        body.length);
-                response.setStatus(HttpStatus.OK_200);
-                os.write(body);
-                os.flush();
-                return;
-            } else if (route == Route.REDIRECT_TO) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                int statusCode = Utils.getIntParameter(params, "status_code",
-                        HttpStatus.MOVED_TEMPORARILY_302);
-                redirectTo(response, params.getValue("url"), statusCode);
-                return;
-            } else if (route == Route.REDIRECT ||
-                    route == Route.RELATIVE_REDIRECT) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                int count = Integer.parseInt(uri.substring(
-                        uri.startsWith("/redirect/") ?
-                                "/redirect/".length() :
-                                "/relative-redirect/".length())) - 1;
-                if (count > 0) {
-                    StringBuilder path = new StringBuilder();
-                    if ("true".equals(params.getValue("absolute"))) {
-                        // Already beneath the prefix, so do not add it again.
-                        path.append(originAndPrefix(request));
-                        path.append("/absolute-redirect/");
-                    } else {
-                        path.append(prefix).append("/relative-redirect/");
-                    }
-                    path.append(count);
-                    redirectTo(response, path.toString());
-                } else {
-                    redirectTo(response, prefix + "/get");
-                }
-
-                return;
-            } else if (route == Route.ABSOLUTE_REDIRECT) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                int count = Integer.parseInt(uri.substring(
-                        "/absolute-redirect/".length())) - 1;
-                // Already beneath the prefix, so do not add it again.
-                StringBuilder path = new StringBuilder(
-                        originAndPrefix(request));
-                if (count > 0) {
-                    path.append("/absolute-redirect/")
-                            .append(count);
-                    redirectTo(response, path.toString());
-                } else {
-                    path.append("/get");
-                    redirectTo(response, path.toString());
-                }
-
-                return;
-            } else if (route == Route.RESPONSE_HEADERS) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                // Collect the headers separately from the response, which
-                // already carries the Date and Server that the transport
-                // adds and upstream's body does not name.
-                HttpFields.Mutable fields = HttpFields.build();
-                for (String paramName : params.getNames()) {
-                    for (String value : params.getValues(paramName)) {
-                        fields.add(paramName, value);
-                    }
-                }
-                fields.put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.APPLICATION_JSON.asString());
-
-                // The body names Content-Length among the rest, so its own
-                // length feeds back into it.  Render until that settles, as
-                // upstream does; it terminates because a longer body only
-                // ever adds digits.
-                byte[] body = new byte[0];
-                for (;;) {
-                    fields.put(HttpHeader.CONTENT_LENGTH, body.length);
-                    byte[] rendered = jsonBody(mapFieldsToJSON(fields));
-                    boolean settled = rendered.length == body.length;
-                    body = rendered;
-                    if (settled) {
-                        break;
-                    }
-                }
-
-                response.getHeaders().add(fields);
-                response.setStatus(HttpStatus.OK_200);
-                os.write(body);
-                os.flush();
-                return;
-            } else if (route == Route.COOKIES) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                JSONObject cookies = new JSONObject();
-
-                boolean showEnv = showEnv(params);
-                for (HttpCookie cookie : Request.getCookies(request)) {
-                    if (showEnv || !ENV_COOKIES.contains(
-                            cookie.getName().toLowerCase(Locale.ROOT))) {
-                        cookies.put(cookie.getName(), cookie.getValue());
-                    }
-                }
-
-                JSONObject json = new JSONObject();
-                json.put("cookies", cookies);
-
-                respondJSON(response, os, json);
-                return;
-            } else if (route == Route.COOKIES_SET) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                for (String name : params.getNames()) {
-                    for (String value : params.getValues(name)) {
-                        setCookie(response, name, value);
-                    }
-                }
-
-                redirectTo(response, prefix + "/cookies");
-                return;
-            } else if (route == Route.COOKIES_SET_PATH) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                // /cookies/set/name/value names one cookie in the path
-                // rather than the query.
-                String[] cookie = uri.substring(
-                        "/cookies/set/".length()).split("/", -1);
-                // Upstream's route matches neither an empty name nor an
-                // empty value, so neither names a cookie to set here.
-                if (cookie.length != 2 || cookie[0].isEmpty() ||
-                        cookie[1].isEmpty()) {
-                    response.setStatus(HttpStatus.NOT_FOUND_404);
-                    return;
-                }
-                setCookie(response, cookie[0], cookie[1]);
-
-                redirectTo(response, prefix + "/cookies");
-                return;
-            } else if (route == Route.COOKIES_DELETE) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                for (String name : params.getNames()) {
-                    // Emptying the value leaves the cookie in place; a
-                    // client drops it only once it has expired.
-                    response.getHeaders().add(HttpHeader.SET_COOKIE,
-                            ("%s=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; " +
-                                    "Max-Age=0; Path=%s").formatted(
-                                    name, cookiePath));
-                }
-
-                redirectTo(response, prefix + "/cookies");
-                return;
-            } else if (route == Route.BASIC_AUTH) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                handleBasicAuth(request, response, os,
-                        uri.substring("/basic-auth/".length()),
-                        HttpStatus.UNAUTHORIZED_401);
-                return;
-            } else if (route == Route.HIDDEN_BASIC_AUTH) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                handleBasicAuth(request, response, os,
-                        uri.substring("/hidden-basic-auth/".length()),
-                        HttpStatus.NOT_FOUND_404);
-                return;
-            } else if (route == Route.DIGEST_AUTH) {
-                DigestAuth.handle(request, response, is, os,
-                        uri.substring("/digest-auth/".length()), params,
-                        cookiePath);
-                return;
-            } else if (route == Route.BEARER) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                String header = request.getHeaders().get(
-                        HttpHeader.AUTHORIZATION);
-                // A bare "Bearer" carries no token, so it fails as well.
-                // Upstream reads "Bearer " as an empty token instead, which
-                // no conforming server can tell from the bare one: a field
-                // value arrives with its trailing space already stripped.
-                if (header == null || !header.startsWith("Bearer ")) {
-                    response.getHeaders().put(HttpHeader.WWW_AUTHENTICATE,
-                            "Bearer");
-                    response.setStatus(HttpStatus.UNAUTHORIZED_401);
-                    return;
-                }
-
-                JSONObject json = new JSONObject();
-                json.put("authenticated", true);
-                json.put("token", header.substring("Bearer ".length()));
-                respondJSON(response, os, json);
-                return;
-            } else if (route == Route.ANYTHING ||
-                    route == Route.ANYTHING_PATH) {
-                respondJSON(response, os, describeRequest(request, is, params,
-                        "url", "args", "headers", "origin", "method", "form",
-                        "data", "files", "json"));
-                return;
-            } else if (route == Route.BYTES) {
-                long length = Long.parseLong(uri.substring(
-                        "/bytes/".length()));
-                int seed = Utils.getIntParameter(params, "seed", -1);
-                Random random = seed != -1 ?
-                        new Random(seed) : ThreadLocalRandom.current();
-
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        OCTET_STREAM);
-                response.getHeaders().put(HttpHeader.CONTENT_LENGTH, length);
-                byte[] buffer = new byte[4096];
-                for (long i = 0; i < length;) {
-                    int count = (int) Math.min(buffer.length, length - i);
-                    random.nextBytes(buffer);
-                    os.write(buffer, 0, count);
-                    i += count;
-                }
-                return;
-            } else if (route == Route.BASE64) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                byte[] body = Base64.getDecoder().decode(
-                        uri.substring("/base64/".length()));
-                // Upstream returns the decoded bytes as a plain string,
-                // which Flask types as HTML whatever they hold.
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
-                response.setStatus(HttpStatus.OK_200);
-                os.write(body);
-                os.flush();
-                return;
-            } else if (route == Route.RANGE) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-
-                long size = Long.parseLong(uri.substring("/range/".length()));
-                long start;
-                long end;
-                String range = request.getHeaders().get(HttpHeader.RANGE);
-                if (range != null && range.startsWith("bytes=")) {
-                    range = range.substring("bytes=".length());
-                    String[] ranges = range.split("-", 2);
-                    if (ranges[0].isEmpty()) {
-                        start = size - Long.parseLong(ranges[1]);
-                        end = size - 1;
-                    } else if (ranges[1].isEmpty()) {
-                        start = Long.parseLong(ranges[0]);
-                        end = size - 1;
-                    } else {
-                        start = Long.parseLong(ranges[0]);
-                        end = Long.parseLong(ranges[1]);
-                    }
-                    if (end + 1 > size || start > end) {
-                        response.setStatus(
-                                HttpStatus.RANGE_NOT_SATISFIABLE_416);
-                        response.getHeaders().add(HttpHeader.ETAG,
-                                "range" + size);
-                        response.getHeaders().add(HttpHeader.CONTENT_RANGE,
-                                "bytes */" + size);
-                        return;
-                    }
-                    response.setStatus(HttpStatus.PARTIAL_CONTENT_206);
-                } else {
-                    start = 0;
-                    end = size - 1;
-                    response.setStatus(HttpStatus.OK_200);
-                }
-
-                response.getHeaders().add(HttpHeader.ETAG, "range" + size);
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        OCTET_STREAM);
-                response.getHeaders().add(HttpHeader.CONTENT_LENGTH,
-                        String.valueOf(end - start + 1));
-                response.getHeaders().add(HttpHeader.CONTENT_RANGE,
-                        "bytes " + start + "-" + end + "/" + size);
-                response.getHeaders().add(HttpHeader.ACCEPT_RANGES, "bytes");
-
-                for (long i = start; i <= end; ++i) {
-                    os.write((char) ('a' + (i % 26)));
-                }
-                os.flush();
-
-                return;
-            } else if (route == Route.IMAGE_JPEG) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                serveResource(response, os, "image/jpeg",
-                        "/image.jpg");
-                return;
-            } else if (route == Route.IMAGE_PNG) {
-                serveResource(response, os, "image/png",
-                        "/image.png");
-                return;
-            } else if (route == Route.IMAGE_SVG) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                serveResource(response, os, "image/svg+xml", "/image.svg");
-                return;
-            } else if (route == Route.IMAGE_WEBP) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                serveResource(response, os, "image/webp", "/image.webp");
-                return;
-            } else if (route == Route.IMAGE) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                String accept = request.getHeaders().get(HttpHeader.ACCEPT);
-                // Upstream reads the header rather than negotiating over it,
-                // so the first type it names that this serves wins.
-                accept = accept == null ? "image/png" :
-                        accept.toLowerCase(Locale.ROOT);
-                if (accept.contains("image/webp")) {
-                    serveResource(response, os, "image/webp", "/image.webp");
-                } else if (accept.contains("image/svg+xml")) {
-                    serveResource(response, os, "image/svg+xml",
-                            "/image.svg");
-                } else if (accept.contains("image/jpeg")) {
-                    serveResource(response, os, "image/jpeg", "/image.jpg");
-                } else if (accept.contains("image/png") ||
-                        accept.contains("image/*")) {
-                    serveResource(response, os, "image/png", "/image.png");
-                } else {
-                    respondNotAcceptable(response, os);
-                }
-                return;
-            } else if (route == Route.HTML) {
-                serveResource(response, os,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
-                        "/text.html");
-                return;
-            } else if (route == Route.XML) {
-                serveResource(response, os, "application/xml",
-                        "/text.xml");
-                return;
-            } else if (route == Route.JSON) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                serveResource(response, os,
-                        MimeTypes.Type.APPLICATION_JSON.asString(),
-                        "/slideshow.json");
-                return;
-            } else if (route == Route.ENCODING_UTF8) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                serveResource(response, os,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
-                        "/utf8.html");
-                return;
-            } else if (route == Route.FORMS_POST) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                // The form posts back to this server, so where it posts to
-                // has to follow the prefix this one is serving beneath.
-                byte[] body = readResource("/forms-post.html").replace(
-                        "action=\"/post\"",
-                        "action=\"" + prefix + "/post\"").getBytes(
-                                StandardCharsets.UTF_8);
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.TEXT_HTML_UTF_8.asString());
-                response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
-                        body.length);
-                response.setStatus(HttpStatus.OK_200);
-                os.write(body);
-                os.flush();
-                return;
-            } else if (route == Route.ROBOTS_TXT) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.TEXT_PLAIN.asString());
-                respondBytes(response, os, ("User-agent: *\nDisallow: " +
-                        prefix + "/deny\n").getBytes(
-                                StandardCharsets.UTF_8));
-                return;
-            } else if (route == Route.DENY) {
-                Utils.copy(is, Utils.NULL_OUTPUT_STREAM);
-                response.setStatus(HttpStatus.OK_200);
-                response.getHeaders().put(HttpHeader.CONTENT_TYPE,
-                        MimeTypes.Type.TEXT_PLAIN.asString());
-                respondBytes(response, os, ANGRY.getBytes(
-                        StandardCharsets.UTF_8));
-                return;
-            }
-            // Only a route the table names but nothing above serves.
-            response.setStatus(HttpStatus.NOT_IMPLEMENTED_501);
+            endpoints.get(route).handle(new Exchange(
+                    request, response, is, os, uri, params));
         } catch (JSONException e) {
             logger.trace("JSONException", e);
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR_500);
@@ -1076,6 +445,795 @@ public class HttpBinHandler extends Handler.Abstract {
             logger.trace("NumberFormatException", nfe);
             response.setStatus(HttpStatus.NOT_FOUND_404);
         }
+    }
+
+    private void home(Exchange exchange) throws IOException {
+        serveResource(exchange, MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
+                "/home.html");
+    }
+
+    private void status(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        int status;
+        try {
+            status = Integer.parseInt(exchange.uri().substring(
+                    "/status/".length()));
+        } catch (NumberFormatException nfe) {
+            response.setStatus(HttpStatus.BAD_REQUEST_400);
+            return;
+        }
+        response.setStatus(status);
+        switch (status) {
+        case HttpStatus.MOVED_PERMANENTLY_301:
+        case HttpStatus.MOVED_TEMPORARILY_302:
+        case HttpStatus.SEE_OTHER_303:
+        case HttpStatus.USE_PROXY_305:
+        case HttpStatus.TEMPORARY_REDIRECT_307:
+            response.getHeaders().put(HttpHeader.LOCATION,
+                    prefix + "/redirect/1");
+            break;
+        case HttpStatus.UNAUTHORIZED_401:
+            response.getHeaders().put(HttpHeader.WWW_AUTHENTICATE,
+                    BASIC_REALM);
+            break;
+        case HttpStatus.PAYMENT_REQUIRED_402:
+            response.getHeaders().put("x-more-info",
+                    "http://vimeo.com/22053820");
+            respondBytes(exchange,
+                    PAYMENT_REQUIRED.getBytes(StandardCharsets.UTF_8));
+            break;
+        case HttpStatus.NOT_ACCEPTABLE_406:
+            respondNotAcceptable(exchange);
+            break;
+        case HttpStatus.PROXY_AUTHENTICATION_REQUIRED_407:
+            response.getHeaders().put(HttpHeader.PROXY_AUTHENTICATE,
+                    BASIC_REALM);
+            break;
+        case HttpStatus.IM_A_TEAPOT_418:
+            response.getHeaders().put("x-more-info",
+                    "http://tools.ietf.org/html/rfc2324");
+            respondBytes(exchange, TEAPOT.getBytes(StandardCharsets.UTF_8));
+            break;
+        default:
+            break;
+        }
+    }
+
+    private void headers(Exchange exchange) throws IOException {
+        JSONObject headers = new JSONObject();
+        HttpFields fields = exchange.request().getHeaders();
+        boolean showEnv = showEnv(exchange.params());
+        for (String headerName : fields.getFieldNamesCollection()) {
+            if (showEnv || !ENV_HEADERS.contains(
+                    headerName.toLowerCase(Locale.ROOT))) {
+                headers.put(headerName, fields.get(headerName));
+            }
+        }
+
+        JSONObject json = new JSONObject();
+        json.put("headers", headers);
+        respondJSON(exchange, json);
+    }
+
+    private void ip(Exchange exchange) throws IOException {
+        JSONObject json = new JSONObject();
+        json.put("origin", getOrigin(exchange.request()));
+        respondJSON(exchange, json);
+    }
+
+    private void uuid(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        JSONObject json = new JSONObject();
+        json.put("uuid", UUID.randomUUID().toString());
+        respondJSON(exchange, json);
+    }
+
+    private void userAgent(Exchange exchange) throws IOException {
+        JSONObject json = new JSONObject();
+        json.put("user-agent", exchange.request().getHeaders().get(
+                HttpHeader.USER_AGENT));
+        respondJSON(exchange, json);
+    }
+
+    private void gzip(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        JSONObject json = describeRequest(exchange, "origin", "headers",
+                "method");
+        json.put("gzipped", true);
+
+        byte[] uncompressed = jsonBody(json);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(
+                uncompressed.length);
+        try (GZIPOutputStream gzipos = new GZIPOutputStream(baos)) {
+            gzipos.write(uncompressed);
+        }
+        byte[] compressed = baos.toByteArray();
+
+        response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                compressed.length);
+        response.getHeaders().put(HttpHeader.CONTENT_ENCODING, "gzip");
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.APPLICATION_JSON.asString());
+        response.setStatus(HttpStatus.OK_200);
+        os.write(compressed);
+        os.flush();
+    }
+
+    private void deflate(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        JSONObject json = describeRequest(exchange, "origin", "headers",
+                "method");
+        json.put("deflated", true);
+
+        byte[] uncompressed = jsonBody(json);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(
+                uncompressed.length);
+        try (DeflaterOutputStream dos = new DeflaterOutputStream(
+                baos, new Deflater(Deflater.DEFAULT_COMPRESSION,
+                        /*nowrap=*/ true))) {
+            dos.write(uncompressed);
+        }
+        byte[] compressed = baos.toByteArray();
+
+        response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                compressed.length);
+        response.getHeaders().put(HttpHeader.CONTENT_ENCODING,
+                "deflate");
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.APPLICATION_JSON.asString());
+        response.setStatus(HttpStatus.OK_200);
+        os.write(compressed);
+        os.flush();
+    }
+
+    private void brotli(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        JSONObject json = describeRequest(exchange, "origin", "headers",
+                "method");
+        json.put("brotli", true);
+
+        byte[] compressed = Brotli.encode(jsonBody(json));
+
+        response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                compressed.length);
+        response.getHeaders().put(HttpHeader.CONTENT_ENCODING, "br");
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.APPLICATION_JSON.asString());
+        response.setStatus(HttpStatus.OK_200);
+        os.write(compressed);
+        os.flush();
+    }
+
+    private void cache(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        HttpFields fields = exchange.request().getHeaders();
+        if (fields.get(HttpHeader.IF_MODIFIED_SINCE) != null ||
+                fields.get(HttpHeader.IF_NONE_MATCH) != null) {
+            response.setStatus(HttpStatus.NOT_MODIFIED_304);
+            return;
+        }
+
+        response.getHeaders().putDate(HttpHeader.LAST_MODIFIED,
+                System.currentTimeMillis());
+        response.getHeaders().put(HttpHeader.ETAG,
+                UUID.randomUUID().toString().replace("-", ""));
+        respondJSON(exchange, describeRequest(exchange, "url", "args",
+                "headers", "origin"));
+    }
+
+    private void cacheSeconds(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        int seconds = Integer.parseInt(exchange.uri().substring(
+                "/cache/".length()));
+
+        JSONObject json = describeRequest(exchange, "url", "args", "headers",
+                "origin");
+
+        exchange.response().getHeaders().put(HttpHeader.CACHE_CONTROL,
+                "public, max-age=" + seconds);
+        respondJSON(exchange, json);
+    }
+
+    private void delay(Exchange exchange) throws IOException {
+        String uri = exchange.uri();
+        int delayMs = (int) (1000 * Double.parseDouble(uri.substring(
+                "/delay/".length())));
+        try {
+            Thread.sleep(Math.min(delayMs, MAX_DELAY_MS));
+        } catch (InterruptedException ie) {
+            // ignore
+        }
+
+        respondJSON(exchange, describeRequest(exchange, "url", "args", "form",
+                "data", "origin", "headers", "files"));
+    }
+
+    private void etag(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        String eTag = exchange.uri().substring("/etag/".length());
+        HttpFields fields = exchange.request().getHeaders();
+        List<String> ifNoneMatch = parseMultiValueHeader(
+                fields.get(HttpHeader.IF_NONE_MATCH));
+        List<String> ifMatch = parseMultiValueHeader(
+                fields.get(HttpHeader.IF_MATCH));
+
+        // Upstream lets If-None-Match answer on its own when both
+        // arrive, so If-Match only applies without it.
+        if (!ifNoneMatch.isEmpty()) {
+            if (ifNoneMatch.contains(eTag) ||
+                    ifNoneMatch.contains("*")) {
+                response.setStatus(HttpStatus.NOT_MODIFIED_304);
+                response.getHeaders().put(HttpHeader.ETAG, eTag);
+                return;
+            }
+        } else if (!ifMatch.isEmpty() && !ifMatch.contains(eTag) &&
+                !ifMatch.contains("*")) {
+            response.setStatus(HttpStatus.PRECONDITION_FAILED_412);
+            return;
+        }
+
+        response.getHeaders().put(HttpHeader.ETAG, eTag);
+        respondJSON(exchange, describeRequest(exchange, "url", "args",
+                "headers", "origin"));
+    }
+
+    private void drip(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Fields params = exchange.params();
+        OutputStream os = exchange.os();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        long durationMs = (long) (1000 * Utils.getDoubleParameter(
+                params, "duration", 0.0));
+        int numBytes = Utils.getIntParameter(params, "numbytes", 10);
+        if (numBytes <= 0) {
+            response.setStatus(HttpStatus.BAD_REQUEST_400);
+            return;
+        }
+        int code = Utils.getIntParameter(params, "code", 200);
+        int delay = Utils.getIntParameter(params, "delay", 0);
+
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                OCTET_STREAM);
+        response.setStatus(code);
+        Utils.sleepUninterruptibly(delay, TimeUnit.SECONDS);
+
+        for (int i = 0; i < numBytes; ++i) {
+            Utils.sleepUninterruptibly(durationMs / numBytes,
+                    TimeUnit.MILLISECONDS);
+            os.write('*');
+        }
+    }
+
+    private void stream(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        // Upstream streams as fast as it can write and stops at a
+        // hundred lines, so asking for more is not a way to make a
+        // server spend a long time answering.
+        int responses = Math.min(Integer.parseInt(exchange.uri().substring(
+                "/stream/".length())), MAX_STREAM);
+
+        // The lines differ only in their id, so the rest is read
+        // once, before the first of them goes out.
+        JSONObject json = describeRequest(exchange, "url", "args", "headers",
+                "origin");
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.APPLICATION_JSON.asString());
+        response.setStatus(HttpStatus.OK_200);
+
+        for (int i = 0; i < responses; ++i) {
+            json.put("id", i);
+            os.write(json.toString().getBytes(
+                    StandardCharsets.UTF_8));
+            os.write('\n');
+            // A line a client cannot read yet is not streamed.
+            os.flush();
+        }
+    }
+
+    private void streamBytes(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Fields params = exchange.params();
+        OutputStream os = exchange.os();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        long numBytes = Long.parseLong(exchange.uri().substring(
+                "/stream-bytes/".length()));
+
+        int seed = Utils.getIntParameter(params, "seed", -1);
+        int chunkSize = Utils.getIntParameter(params, "chunkSize",
+                200);
+        byte[] buf = new byte[chunkSize];
+        Random random = seed == -1 ?
+                ThreadLocalRandom.current() : new Random(seed);
+
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                OCTET_STREAM);
+        response.setStatus(HttpStatus.OK_200);
+
+        for (long i = 0; i < numBytes; i += chunkSize) {
+            random.nextBytes(buf);
+            os.write(buf, 0, i + chunkSize > numBytes ?
+                    (int) (numBytes - i) : chunkSize);
+        }
+    }
+
+    private void get(Exchange exchange) throws IOException {
+        // Upstream reports no body here, the route taking none.
+        respondJSON(exchange, describeRequest(exchange, "url", "args",
+                "headers", "origin"));
+    }
+
+    private void postPutPatchDelete(Exchange exchange) throws IOException {
+        respondJSON(exchange, describeRequest(exchange, "url", "args", "form",
+                "data", "origin", "headers", "files", "json"));
+    }
+
+    private void links(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        String[] parts = exchange.uri().substring("/links/".length())
+                .split("/", -1);
+        int count;
+        int offset;
+        try {
+            count = Integer.parseInt(parts[0]);
+            offset = parts.length == 1 ? -1 :
+                    Integer.parseInt(parts[1]);
+        } catch (NumberFormatException nfe) {
+            response.setStatus(HttpStatus.NOT_FOUND_404);
+            return;
+        }
+        if (parts.length > 2) {
+            response.setStatus(HttpStatus.NOT_FOUND_404);
+            return;
+        }
+        if (parts.length == 1) {
+            // Naming no link to leave out lands on the first.
+            redirectTo(response, prefix + "/links/" + count + "/0");
+            return;
+        }
+
+        count = Math.min(Math.max(1, count), MAX_LINKS);
+        StringBuilder html = new StringBuilder(
+                "<html><head><title>Links</title></head><body>");
+        for (int i = 0; i < count; ++i) {
+            if (i == offset) {
+                html.append(i).append(" ");
+            } else {
+                html.append("<a href=\'").append(prefix)
+                        .append("/links/").append(count).append("/")
+                        .append(i).append("\'>").append(i)
+                        .append("</a> ");
+            }
+        }
+        html.append("</body></html>");
+
+        byte[] body = html.toString().getBytes(
+                StandardCharsets.UTF_8);
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.TEXT_HTML_UTF_8.asString());
+        response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                body.length);
+        response.setStatus(HttpStatus.OK_200);
+        os.write(body);
+        os.flush();
+    }
+
+    private void redirectToUrl(Exchange exchange) throws IOException {
+        Fields params = exchange.params();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        int statusCode = Utils.getIntParameter(params, "status_code",
+                HttpStatus.MOVED_TEMPORARILY_302);
+        redirectTo(exchange.response(), params.getValue("url"), statusCode);
+    }
+
+    private void redirect(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        String uri = exchange.uri();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        int count = Integer.parseInt(uri.substring(
+                uri.startsWith("/redirect/") ?
+                        "/redirect/".length() :
+                        "/relative-redirect/".length())) - 1;
+        if (count > 0) {
+            StringBuilder path = new StringBuilder();
+            if ("true".equals(exchange.params().getValue("absolute"))) {
+                // Already beneath the prefix, so do not add it again.
+                path.append(originAndPrefix(exchange.request()));
+                path.append("/absolute-redirect/");
+            } else {
+                path.append(prefix).append("/relative-redirect/");
+            }
+            path.append(count);
+            redirectTo(response, path.toString());
+        } else {
+            redirectTo(response, prefix + "/get");
+        }
+    }
+
+    private void absoluteRedirect(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        int count = Integer.parseInt(exchange.uri().substring(
+                "/absolute-redirect/".length())) - 1;
+        // Already beneath the prefix, so do not add it again.
+        StringBuilder path = new StringBuilder(
+                originAndPrefix(exchange.request()));
+        if (count > 0) {
+            path.append("/absolute-redirect/")
+                    .append(count);
+            redirectTo(response, path.toString());
+        } else {
+            path.append("/get");
+            redirectTo(response, path.toString());
+        }
+    }
+
+    private void responseHeaders(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        Fields params = exchange.params();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        // Collect the headers separately from the response, which
+        // already carries the Date and Server that the transport
+        // adds and upstream's body does not name.
+        HttpFields.Mutable fields = HttpFields.build();
+        for (String paramName : params.getNames()) {
+            for (String value : params.getValues(paramName)) {
+                fields.add(paramName, value);
+            }
+        }
+        fields.put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.APPLICATION_JSON.asString());
+
+        // The body names Content-Length among the rest, so its own
+        // length feeds back into it.  Render until that settles, as
+        // upstream does; it terminates because a longer body only
+        // ever adds digits.
+        byte[] body = new byte[0];
+        for (;;) {
+            fields.put(HttpHeader.CONTENT_LENGTH, body.length);
+            byte[] rendered = jsonBody(mapFieldsToJSON(fields));
+            boolean settled = rendered.length == body.length;
+            body = rendered;
+            if (settled) {
+                break;
+            }
+        }
+
+        response.getHeaders().add(fields);
+        response.setStatus(HttpStatus.OK_200);
+        os.write(body);
+        os.flush();
+    }
+
+    private void cookies(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        JSONObject cookies = new JSONObject();
+
+        boolean showEnv = showEnv(exchange.params());
+        for (HttpCookie cookie : Request.getCookies(exchange.request())) {
+            if (showEnv || !ENV_COOKIES.contains(
+                    cookie.getName().toLowerCase(Locale.ROOT))) {
+                cookies.put(cookie.getName(), cookie.getValue());
+            }
+        }
+
+        JSONObject json = new JSONObject();
+        json.put("cookies", cookies);
+
+        respondJSON(exchange, json);
+    }
+
+    private void setCookies(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Fields params = exchange.params();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        for (String name : params.getNames()) {
+            for (String value : params.getValues(name)) {
+                setCookie(response, name, value);
+            }
+        }
+
+        redirectTo(response, prefix + "/cookies");
+    }
+
+    private void setCookieFromPath(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        // /cookies/set/name/value names one cookie in the path
+        // rather than the query.
+        String[] cookie = exchange.uri().substring(
+                "/cookies/set/".length()).split("/", -1);
+        // Upstream's route matches neither an empty name nor an
+        // empty value, so neither names a cookie to set here.
+        if (cookie.length != 2 || cookie[0].isEmpty() ||
+                cookie[1].isEmpty()) {
+            response.setStatus(HttpStatus.NOT_FOUND_404);
+            return;
+        }
+        setCookie(response, cookie[0], cookie[1]);
+
+        redirectTo(response, prefix + "/cookies");
+    }
+
+    private void deleteCookies(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        for (String name : exchange.params().getNames()) {
+            // Emptying the value leaves the cookie in place; a
+            // client drops it only once it has expired.
+            response.getHeaders().add(HttpHeader.SET_COOKIE,
+                    ("%s=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; " +
+                            "Max-Age=0; Path=%s").formatted(
+                            name, cookiePath));
+        }
+
+        redirectTo(response, prefix + "/cookies");
+    }
+
+    private void basicAuth(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        handleBasicAuth(exchange.request(), exchange.response(), exchange.os(),
+                exchange.uri().substring("/basic-auth/".length()),
+                HttpStatus.UNAUTHORIZED_401);
+    }
+
+    private void hiddenBasicAuth(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        handleBasicAuth(exchange.request(), exchange.response(), exchange.os(),
+                exchange.uri().substring("/hidden-basic-auth/".length()),
+                HttpStatus.NOT_FOUND_404);
+    }
+
+    private void digestAuth(Exchange exchange) throws IOException {
+        Request request = exchange.request();
+        Response response = exchange.response();
+        InputStream is = exchange.is();
+        OutputStream os = exchange.os();
+        String uri = exchange.uri();
+        Fields params = exchange.params();
+        DigestAuth.handle(request, response, is, os,
+                uri.substring("/digest-auth/".length()), params,
+                cookiePath);
+    }
+
+    private void bearer(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        String header = exchange.request().getHeaders().get(
+                HttpHeader.AUTHORIZATION);
+        // A bare "Bearer" carries no token, so it fails as well.
+        // Upstream reads "Bearer " as an empty token instead, which
+        // no conforming server can tell from the bare one: a field
+        // value arrives with its trailing space already stripped.
+        if (header == null || !header.startsWith("Bearer ")) {
+            response.getHeaders().put(HttpHeader.WWW_AUTHENTICATE,
+                    "Bearer");
+            response.setStatus(HttpStatus.UNAUTHORIZED_401);
+            return;
+        }
+
+        JSONObject json = new JSONObject();
+        json.put("authenticated", true);
+        json.put("token", header.substring("Bearer ".length()));
+        respondJSON(exchange, json);
+    }
+
+    private void anything(Exchange exchange) throws IOException {
+        respondJSON(exchange, describeRequest(exchange, "url", "args",
+                "headers", "origin", "method", "form", "data", "files",
+                "json"));
+    }
+
+    private void bytes(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        long length = Long.parseLong(exchange.uri().substring(
+                "/bytes/".length()));
+        int seed = Utils.getIntParameter(exchange.params(), "seed", -1);
+        Random random = seed != -1 ?
+                new Random(seed) : ThreadLocalRandom.current();
+
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        response.setStatus(HttpStatus.OK_200);
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                OCTET_STREAM);
+        response.getHeaders().put(HttpHeader.CONTENT_LENGTH, length);
+        byte[] buffer = new byte[4096];
+        for (long i = 0; i < length;) {
+            int count = (int) Math.min(buffer.length, length - i);
+            random.nextBytes(buffer);
+            os.write(buffer, 0, count);
+            i += count;
+        }
+    }
+
+    private void base64(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        byte[] body = Base64.getDecoder().decode(
+                exchange.uri().substring("/base64/".length()));
+        // Upstream returns the decoded bytes as a plain string,
+        // which Flask types as HTML whatever they hold.
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.TEXT_HTML_UTF_8.asString());
+        response.setStatus(HttpStatus.OK_200);
+        os.write(body);
+        os.flush();
+    }
+
+    private void range(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        String uri = exchange.uri();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+
+        long size = Long.parseLong(uri.substring("/range/".length()));
+        long start;
+        long end;
+        String range = exchange.request().getHeaders().get(HttpHeader.RANGE);
+        if (range != null && range.startsWith("bytes=")) {
+            range = range.substring("bytes=".length());
+            String[] ranges = range.split("-", 2);
+            if (ranges[0].isEmpty()) {
+                start = size - Long.parseLong(ranges[1]);
+                end = size - 1;
+            } else if (ranges[1].isEmpty()) {
+                start = Long.parseLong(ranges[0]);
+                end = size - 1;
+            } else {
+                start = Long.parseLong(ranges[0]);
+                end = Long.parseLong(ranges[1]);
+            }
+            if (end + 1 > size || start > end) {
+                response.setStatus(
+                        HttpStatus.RANGE_NOT_SATISFIABLE_416);
+                response.getHeaders().add(HttpHeader.ETAG,
+                        "range" + size);
+                response.getHeaders().add(HttpHeader.CONTENT_RANGE,
+                        "bytes */" + size);
+                return;
+            }
+            response.setStatus(HttpStatus.PARTIAL_CONTENT_206);
+        } else {
+            start = 0;
+            end = size - 1;
+            response.setStatus(HttpStatus.OK_200);
+        }
+
+        response.getHeaders().add(HttpHeader.ETAG, "range" + size);
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                OCTET_STREAM);
+        response.getHeaders().add(HttpHeader.CONTENT_LENGTH,
+                String.valueOf(end - start + 1));
+        response.getHeaders().add(HttpHeader.CONTENT_RANGE,
+                "bytes " + start + "-" + end + "/" + size);
+        response.getHeaders().add(HttpHeader.ACCEPT_RANGES, "bytes");
+
+        for (long i = start; i <= end; ++i) {
+            os.write((char) ('a' + (i % 26)));
+        }
+        os.flush();
+    }
+
+    private void imageJpeg(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        serveResource(exchange, "image/jpeg", "/image.jpg");
+    }
+
+    private void imagePng(Exchange exchange) throws IOException {
+        serveResource(exchange, "image/png", "/image.png");
+    }
+
+    private void imageSvg(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        serveResource(exchange, "image/svg+xml", "/image.svg");
+    }
+
+    private void imageWebp(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        serveResource(exchange, "image/webp", "/image.webp");
+    }
+
+    private void image(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        String accept = exchange.request().getHeaders().get(HttpHeader.ACCEPT);
+        // Upstream reads the header rather than negotiating over it,
+        // so the first type it names that this serves wins.
+        accept = accept == null ? "image/png" :
+                accept.toLowerCase(Locale.ROOT);
+        if (accept.contains("image/webp")) {
+            serveResource(exchange, "image/webp", "/image.webp");
+        } else if (accept.contains("image/svg+xml")) {
+            serveResource(exchange, "image/svg+xml", "/image.svg");
+        } else if (accept.contains("image/jpeg")) {
+            serveResource(exchange, "image/jpeg", "/image.jpg");
+        } else if (accept.contains("image/png") ||
+                accept.contains("image/*")) {
+            serveResource(exchange, "image/png", "/image.png");
+        } else {
+            respondNotAcceptable(exchange);
+        }
+    }
+
+    private void html(Exchange exchange) throws IOException {
+        serveResource(exchange, MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
+                "/text.html");
+    }
+
+    private void xml(Exchange exchange) throws IOException {
+        serveResource(exchange, "application/xml", "/text.xml");
+    }
+
+    private void json(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        serveResource(exchange, MimeTypes.Type.APPLICATION_JSON.asString(),
+                "/slideshow.json");
+    }
+
+    private void encodingUtf8(Exchange exchange) throws IOException {
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        serveResource(exchange, MimeTypes.Type.TEXT_HTML_UTF_8.asString(),
+                "/utf8.html");
+    }
+
+    private void formsPost(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        OutputStream os = exchange.os();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        // The form posts back to this server, so where it posts to
+        // has to follow the prefix this one is serving beneath.
+        byte[] body = readResource("/forms-post.html").replace(
+                "action=\"/post\"",
+                "action=\"" + prefix + "/post\"").getBytes(
+                        StandardCharsets.UTF_8);
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.TEXT_HTML_UTF_8.asString());
+        response.getHeaders().put(HttpHeader.CONTENT_LENGTH,
+                body.length);
+        response.setStatus(HttpStatus.OK_200);
+        os.write(body);
+        os.flush();
+    }
+
+    private void robotsTxt(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        response.setStatus(HttpStatus.OK_200);
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.TEXT_PLAIN.asString());
+        respondBytes(exchange, ("User-agent: *\nDisallow: " + prefix +
+                "/deny\n").getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void deny(Exchange exchange) throws IOException {
+        Response response = exchange.response();
+        Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
+        response.setStatus(HttpStatus.OK_200);
+        response.getHeaders().put(HttpHeader.CONTENT_TYPE,
+                MimeTypes.Type.TEXT_PLAIN.asString());
+        respondBytes(exchange, ANGRY.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -1123,6 +1281,11 @@ public class HttpBinHandler extends Handler.Abstract {
                 StandardCharsets.UTF_8);
     }
 
+    private static void respondJSON(Exchange exchange, JSONObject obj)
+            throws IOException {
+        respondJSON(exchange.response(), exchange.os(), obj);
+    }
+
     private static void respondJSON(Response response, OutputStream os,
             JSONObject obj) throws IOException {
         respondJSON(response, os, obj, HttpStatus.OK_200);
@@ -1146,11 +1309,21 @@ public class HttpBinHandler extends Handler.Abstract {
     }
 
     /** Writes a body the caller has already chosen a status for. */
+    private static void respondBytes(Exchange exchange, byte[] data)
+            throws IOException {
+        respondBytes(exchange.response(), exchange.os(), data);
+    }
+
     private static void respondBytes(Response response, OutputStream os,
             byte[] body) throws IOException {
         response.getHeaders().put(HttpHeader.CONTENT_LENGTH, body.length);
         os.write(body);
         os.flush();
+    }
+
+    private static void respondNotAcceptable(Exchange exchange)
+            throws IOException {
+        respondNotAcceptable(exchange.response(), exchange.os());
     }
 
     private static void respondNotAcceptable(Response response,
@@ -1170,6 +1343,12 @@ public class HttpBinHandler extends Handler.Abstract {
 
     private static void redirectTo(Response response, String location) {
         redirectTo(response, location, HttpStatus.MOVED_TEMPORARILY_302);
+    }
+
+    private void serveResource(Exchange exchange, String contentType,
+            String resource) throws IOException {
+        serveResource(exchange.response(), exchange.os(), contentType,
+                resource);
     }
 
     private void serveResource(Response response, OutputStream os,
@@ -1266,6 +1445,12 @@ public class HttpBinHandler extends Handler.Abstract {
      * @return the report
      * @throws IOException if reading the body fails
      */
+    private JSONObject describeRequest(Exchange exchange, String... keys)
+            throws IOException {
+        return describeRequest(exchange.request(), exchange.is(),
+                exchange.params(), keys);
+    }
+
     private JSONObject describeRequest(Request request, InputStream is,
             Fields params, String... keys) throws IOException {
         Body body = null;
