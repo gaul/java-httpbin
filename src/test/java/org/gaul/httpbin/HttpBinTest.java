@@ -20,6 +20,7 @@ package org.gaul.httpbin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
@@ -29,7 +30,9 @@ import java.util.concurrent.TimeUnit;
 import org.brotli.dec.BrotliInputStream;
 import org.eclipse.jetty.client.ContentResponse;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.InputStreamResponseListener;
 import org.eclipse.jetty.client.MultiPartRequestContent;
+import org.eclipse.jetty.client.Response;
 import org.eclipse.jetty.client.StringRequestContent;
 import org.eclipse.jetty.http.HttpCookie;
 import org.eclipse.jetty.http.HttpFields;
@@ -579,6 +582,54 @@ public final class HttpBinTest {
         JSONObject object = new JSONObject(response.getContentAsString());
         assertThat(object.keySet()).as(path)
                 .containsExactlyInAnyOrder(keys);
+    }
+
+    /** Asking for more than upstream generates gets what upstream does. */
+    @Test
+    public void testGeneratedBodiesAreBounded() throws Exception {
+        assertBodySize("/bytes/200000", 100 * 1024);
+        assertBodySize("/stream-bytes/200000", 100 * 1024);
+        assertBodySize("/drip?numbytes=20000000&duration=0",
+                10 * 1024 * 1024);
+    }
+
+    /** A length upstream will not generate names no route at all. */
+    @Test
+    public void testGeneratedBodiesRefuseLengthsUpstreamRefuses()
+            throws Exception {
+        for (String path : new String[] {
+            "/bytes/-1", "/stream-bytes/-1", "/range/-1",
+            "/range/0", "/range/102401",
+        }) {
+            ContentResponse response = client.newRequest(
+                    httpBinEndpoint + path)
+                    .timeout(30, TimeUnit.SECONDS)
+                    .send();
+            assertThat(response.getStatus()).as(path).isEqualTo(404);
+        }
+        // The largest it does generate still answers.
+        assertBodySize("/range/102400", 100 * 1024);
+    }
+
+    /** Counts a body rather than buffering one the client would refuse. */
+    private void assertBodySize(String path, long size) throws Exception {
+        InputStreamResponseListener listener =
+                new InputStreamResponseListener();
+        client.newRequest(httpBinEndpoint + path)
+                .timeout(30, TimeUnit.SECONDS)
+                .send(listener);
+        Response response = listener.get(30, TimeUnit.SECONDS);
+        assertThat(response.getStatus()).as(path).isEqualTo(200);
+
+        long count = 0;
+        byte[] buffer = new byte[8192];
+        try (InputStream is = listener.getInputStream()) {
+            for (int read = is.read(buffer); read != -1;
+                    read = is.read(buffer)) {
+                count += read;
+            }
+        }
+        assertThat(count).as(path).isEqualTo(size);
     }
 
     /** A chunk of no bytes must not become a body that never ends. */

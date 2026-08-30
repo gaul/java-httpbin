@@ -71,6 +71,11 @@ public class HttpBinHandler extends Handler.Abstract {
             "image/*");
     private static final int MAX_LINKS = 200;
     private static final int MAX_STREAM = 100;
+    // What the endpoints that generate a body will generate.  A test server
+    // answers whatever a test asks for, and a mistyped length should not
+    // become the largest allocation in the run.
+    private static final int MAX_BYTES = 100 * 1024;
+    private static final int MAX_DRIP_BYTES = 10 * 1024 * 1024;
     // What a proxy or the platform underneath adds, which says more about
     // where a server runs than about the request that reached it.  Upstream
     // reports these only when the query names show_env.
@@ -694,7 +699,8 @@ public class HttpBinHandler extends Handler.Abstract {
 
         long durationMs = (long) (1000 * Utils.getDoubleParameter(
                 params, "duration", 0.0));
-        int numBytes = Utils.getIntParameter(params, "numbytes", 10);
+        int numBytes = Math.min(Utils.getIntParameter(params, "numbytes", 10),
+                MAX_DRIP_BYTES);
         if (numBytes <= 0) {
             response.setStatus(HttpStatus.BAD_REQUEST_400);
             return;
@@ -747,8 +753,8 @@ public class HttpBinHandler extends Handler.Abstract {
         OutputStream os = exchange.os();
         Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
 
-        long numBytes = Long.parseLong(exchange.uri().substring(
-                "/stream-bytes/".length()));
+        long numBytes = Math.min(parsePathNumber(exchange.uri().substring(
+                "/stream-bytes/".length())), MAX_BYTES);
 
         int seed = Utils.getIntParameter(params, "seed", -1);
         // A chunk of no bytes never reaches the end of the body, so the
@@ -1051,8 +1057,8 @@ public class HttpBinHandler extends Handler.Abstract {
     private void bytes(Exchange exchange) throws IOException {
         Response response = exchange.response();
         OutputStream os = exchange.os();
-        long length = Long.parseLong(exchange.uri().substring(
-                "/bytes/".length()));
+        long length = Math.min(parsePathNumber(exchange.uri().substring(
+                "/bytes/".length())), MAX_BYTES);
         int seed = Utils.getIntParameter(exchange.params(), "seed", -1);
         Random random = seed != -1 ?
                 new Random(seed) : ThreadLocalRandom.current();
@@ -1092,7 +1098,15 @@ public class HttpBinHandler extends Handler.Abstract {
         String uri = exchange.uri();
         Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
 
-        long size = Long.parseLong(uri.substring("/range/".length()));
+        long size = parsePathNumber(uri.substring("/range/".length()));
+        if (size <= 0 || size > MAX_BYTES) {
+            // Upstream serves no body outside the length it will generate,
+            // and still names the ETag the request asked about.
+            response.getHeaders().put(HttpHeader.ETAG, "range" + size);
+            response.getHeaders().put(HttpHeader.ACCEPT_RANGES, "bytes");
+            response.setStatus(HttpStatus.NOT_FOUND_404);
+            return;
+        }
         long start;
         long end;
         String range = exchange.request().getHeaders().get(HttpHeader.RANGE);
@@ -1620,6 +1634,26 @@ public class HttpBinHandler extends Handler.Abstract {
      * @param path raw path from the request
      * @return the path beneath the prefix, or null when it lies outside
      */
+    /**
+     * Reads the number a route names in its path.
+     *
+     * <p>Upstream matches digits alone there, so anything else -- a minus
+     * sign included -- names no route rather than a negative length.  The
+     * caller lets the NumberFormatException reach the 404 that says so.
+     *
+     * @param value path segment naming the number
+     * @return the number it names
+     */
+    private static long parsePathNumber(String value) {
+        for (int i = 0; i < value.length(); ++i) {
+            char c = value.charAt(i);
+            if (c < '0' || c > '9') {
+                throw new NumberFormatException(value);
+            }
+        }
+        return Long.parseLong(value);
+    }
+
     private String stripPrefix(String path) {
         if (prefix.isEmpty()) {
             return path;
