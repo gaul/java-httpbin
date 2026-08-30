@@ -21,6 +21,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -66,6 +68,10 @@ public class HttpBinHandler extends Handler.Abstract {
             HttpBinHandler.class);
     private static final int MAX_DELAY_MS = 10 * 1000;
     private static final String OCTET_STREAM = "application/octet-stream";
+    // What upstream answers with when /base64 was handed something it
+    // cannot read, in place of an error.
+    private static final String BASE64_ERROR =
+            "Incorrect Base64 data try: SFRUUEJJTiBpcyBhd2Vzb21l";
     private static final List<String> ACCEPTED_MEDIA_TYPES = List.of(
             "image/webp", "image/svg+xml", "image/jpeg", "image/png",
             "image/*");
@@ -1081,8 +1087,14 @@ public class HttpBinHandler extends Handler.Abstract {
         Response response = exchange.response();
         OutputStream os = exchange.os();
         Utils.copy(exchange.is(), Utils.NULL_OUTPUT_STREAM);
-        byte[] body = Base64.getDecoder().decode(
-                exchange.uri().substring("/base64/".length()));
+
+        String value = exchange.uri().substring("/base64/".length());
+        if (value.isEmpty()) {
+            // Upstream's route wants a value and matches nothing without.
+            response.setStatus(HttpStatus.NOT_FOUND_404);
+            return;
+        }
+        byte[] body = decodeBase64(value);
         // Upstream returns the decoded bytes as a plain string,
         // which Flask types as HTML whatever they hold.
         response.getHeaders().put(HttpHeader.CONTENT_TYPE,
@@ -1644,6 +1656,36 @@ public class HttpBinHandler extends Handler.Abstract {
      * @param value path segment naming the number
      * @return the number it names
      */
+    /**
+     * Decodes what /base64 was asked to decode.
+     *
+     * <p>Upstream reads either alphabet, mapping the URL-safe characters
+     * onto the standard ones before decoding, and reads the result as UTF-8
+     * text.  Whatever it cannot read that way it answers with a fixed
+     * sentence rather than an error, so this returns that sentence in place
+     * of throwing: the status is 200 either way, leaving the body as the
+     * only thing that can say so.
+     *
+     * @param value what the path named
+     * @return the bytes it named, or the sentence saying it named none
+     */
+    private static byte[] decodeBase64(String value) {
+        try {
+            // Java's decoder reads unpadded input where upstream's does not.
+            if (value.length() % 4 != 0) {
+                throw new IllegalArgumentException(value);
+            }
+            byte[] decoded = Base64.getDecoder().decode(
+                    value.replace('-', '+').replace('_', '/'));
+            StandardCharsets.UTF_8.newDecoder().decode(
+                    ByteBuffer.wrap(decoded));
+            return decoded;
+        } catch (CharacterCodingException | IllegalArgumentException e) {
+            logger.trace("undecodable base64", e);
+            return BASE64_ERROR.getBytes(StandardCharsets.UTF_8);
+        }
+    }
+
     private static long parsePathNumber(String value) {
         for (int i = 0; i < value.length(); ++i) {
             char c = value.charAt(i);

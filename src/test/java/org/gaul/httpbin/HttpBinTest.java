@@ -584,6 +584,33 @@ public final class HttpBinTest {
                 .containsExactlyInAnyOrder(keys);
     }
 
+    /** Both base64 alphabets read, and what reads as neither says so. */
+    @Test
+    public void testBase64() throws Exception {
+        assertBase64("aGVsbG8=", "hello");
+        assertBase64("SFRUUEJJTiBpcyBhd2Vzb21l", "HTTPBIN is awesome");
+        assertBase64("Pj4-", ">>>");
+        assertBase64("Pj4+", ">>>");
+
+        // Unpadded, outside either alphabet, and not text once decoded.
+        String message = "Incorrect Base64 data try: SFRUUEJJTiBpcyBhd2Vzb21l";
+        assertBase64("aGVsbG8", message);
+        assertBase64("notvalidbase64!", message);
+        assertBase64("-_8=", message);
+
+        assertThat(client.GET(httpBinEndpoint + "/base64/").getStatus())
+                .as("no value").isEqualTo(404);
+    }
+
+    private void assertBase64(String value, String expected)
+            throws Exception {
+        ContentResponse response = client.GET(
+                httpBinEndpoint + "/base64/" + value);
+        assertThat(response.getStatus()).as(value).isEqualTo(200);
+        assertThat(response.getContentAsString()).as(value)
+                .isEqualTo(expected);
+    }
+
     /** Asking for more than upstream generates gets what upstream does. */
     @Test
     public void testGeneratedBodiesAreBounded() throws Exception {
