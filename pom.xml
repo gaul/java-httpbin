@@ -115,6 +115,21 @@
   </profiles>
 
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <!-- The jar carries files taken from httpbin, whose licenses ask
+             that their notice travel with them. -->
+        <directory>${project.basedir}</directory>
+        <targetPath>META-INF</targetPath>
+        <includes>
+          <include>LICENSE</include>
+          <include>NOTICE</include>
+        </includes>
+      </resource>
+    </resources>
     <extensions>
       <extension>
         <groupId>eu.maveniverse.maven.njord</groupId>
