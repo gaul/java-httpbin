@@ -581,6 +581,19 @@ public final class HttpBinTest {
                 .containsExactlyInAnyOrder(keys);
     }
 
+    /** A chunk of no bytes must not become a body that never ends. */
+    @Test
+    public void testStreamBytesChunkSizeFloor() throws Exception {
+        for (String chunkSize : new String[] {"0", "-1"}) {
+            ContentResponse response = client.newRequest(httpBinEndpoint +
+                    "/stream-bytes/10?chunkSize=" + chunkSize)
+                    .timeout(10, TimeUnit.SECONDS)
+                    .send();
+            assertThat(response.getStatus()).as(chunkSize).isEqualTo(200);
+            assertThat(response.getContent()).as(chunkSize).hasSize(10);
+        }
+    }
+
     @Test
     public void testPutData() throws Exception {
         String input = "{\"foo\": 42}";

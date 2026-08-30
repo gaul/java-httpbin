@@ -751,8 +751,11 @@ public class HttpBinHandler extends Handler.Abstract {
                 "/stream-bytes/".length()));
 
         int seed = Utils.getIntParameter(params, "seed", -1);
-        int chunkSize = Utils.getIntParameter(params, "chunkSize",
-                200);
+        // A chunk of no bytes never reaches the end of the body, so the
+        // loop below would spin for as long as the process lives.  Upstream
+        // takes the same floor.
+        int chunkSize = Math.max(1, Utils.getIntParameter(params, "chunkSize",
+                200));
         byte[] buf = new byte[chunkSize];
         Random random = seed == -1 ?
                 ThreadLocalRandom.current() : new Random(seed);
