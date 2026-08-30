@@ -659,12 +659,35 @@ public final class HttpBinTest {
         assertThat(count).as(path).isEqualTo(size);
     }
 
+    /** The chunk size upstream names is the one that is read. */
+    @Test
+    public void testStreamBytesChunkSize() throws Exception {
+        // Every chunk draws its own bytes, so from one seed a different
+        // chunk size draws a different body.
+        byte[] whole = streamBytes("?seed=1&chunk_size=20");
+        byte[] halves = streamBytes("?seed=1&chunk_size=10");
+        assertThat(whole).hasSize(20);
+        assertThat(halves).hasSize(20);
+        assertThat(halves).isNotEqualTo(whole);
+
+        // Which makes the name upstream does not use visibly unread.
+        assertThat(streamBytes("?seed=1&chunkSize=10"))
+                .isEqualTo(streamBytes("?seed=1"));
+    }
+
+    private byte[] streamBytes(String query) throws Exception {
+        ContentResponse response = client.GET(
+                httpBinEndpoint + "/stream-bytes/20" + query);
+        assertThat(response.getStatus()).as(query).isEqualTo(200);
+        return response.getContent();
+    }
+
     /** A chunk of no bytes must not become a body that never ends. */
     @Test
     public void testStreamBytesChunkSizeFloor() throws Exception {
         for (String chunkSize : new String[] {"0", "-1"}) {
             ContentResponse response = client.newRequest(httpBinEndpoint +
-                    "/stream-bytes/10?chunkSize=" + chunkSize)
+                    "/stream-bytes/10?chunk_size=" + chunkSize)
                     .timeout(10, TimeUnit.SECONDS)
                     .send();
             assertThat(response.getStatus()).as(chunkSize).isEqualTo(200);

@@ -766,8 +766,8 @@ public class HttpBinHandler extends Handler.Abstract {
         // A chunk of no bytes never reaches the end of the body, so the
         // loop below would spin for as long as the process lives.  Upstream
         // takes the same floor.
-        int chunkSize = Math.max(1, Utils.getIntParameter(params, "chunkSize",
-                200));
+        int chunkSize = Math.max(1, Utils.getIntParameter(params,
+                "chunk_size", 10 * 1024));
         byte[] buf = new byte[chunkSize];
         Random random = seed == -1 ?
                 ThreadLocalRandom.current() : new Random(seed);
@@ -780,6 +780,9 @@ public class HttpBinHandler extends Handler.Abstract {
             random.nextBytes(buf);
             os.write(buf, 0, i + chunkSize > numBytes ?
                     (int) (numBytes - i) : chunkSize);
+            // A chunk the buffer is still holding is not a chunk the
+            // client saw, which is what the size was asked for.
+            os.flush();
         }
     }
 
