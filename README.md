@@ -176,7 +176,7 @@ work through one of those differences.
 
 ## License
 
-Copyright (C) 2018-2023 Andrew Gaul<br />
+Copyright (C) 2018-2026 Andrew Gaul<br />
 Copyright (C) 2015-2016 Bounce Storage
 
 Licensed under the Apache License, Version 2.0
