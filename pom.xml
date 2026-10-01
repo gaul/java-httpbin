@@ -334,7 +334,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>17</java.version>
-    <jetty.version>12.1.12</jetty.version>
+    <jetty.version>12.1.13</jetty.version>
     <njord.version>0.7.5</njord.version>
   </properties>
 
